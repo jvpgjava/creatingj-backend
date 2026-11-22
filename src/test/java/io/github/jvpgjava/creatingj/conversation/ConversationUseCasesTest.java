@@ -28,6 +28,7 @@ import io.github.jvpgjava.creatingj.conversation.domain.Generation;
 import io.github.jvpgjava.creatingj.conversation.domain.GenerationStatus;
 import io.github.jvpgjava.creatingj.conversation.domain.GenerationStreamEvent;
 import io.github.jvpgjava.creatingj.identity.domain.UserId;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase;
 import io.github.jvpgjava.creatingj.inference.application.port.out.ModelGatewayPort;
 import io.github.jvpgjava.creatingj.inference.domain.GenerationChunk;
 import io.github.jvpgjava.creatingj.inference.domain.GenerationRequest;
@@ -35,6 +36,7 @@ import io.github.jvpgjava.creatingj.inference.domain.ModelCompletionResult;
 import io.github.jvpgjava.creatingj.inference.domain.ModelProviderException;
 import io.github.jvpgjava.creatingj.inference.domain.ProviderFailureKind;
 import io.github.jvpgjava.creatingj.inference.domain.TokenUsage;
+import io.github.jvpgjava.creatingj.inference.domain.UsageRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -94,10 +96,24 @@ class ConversationUseCasesTest {
                 conversationStore, auditPort, clock, "z-ai/glm-5.3-flash");
         listConversations = new ListConversationsInteractor(conversationStore);
         getHistory = new GetConversationHistoryInteractor(conversationStore, messageStore, generationStore);
+        EnforceQuotaAndRecordUsageUseCase noOpQuota = new EnforceQuotaAndRecordUsageUseCase() {
+            @Override
+            public void acquirePermit(UserId userId) {
+            }
+
+            @Override
+            public UsageRecord recordAndRelease(RecordUsageCommand command) {
+                return new UsageRecord(UUID.randomUUID(), command.userId(), command.conversationId(),
+                        command.generationId(), command.modelId(), command.source(), 0, 0, 0, true, 0,
+                        command.outcome(), NOW);
+            }
+        };
+
         sendMessage = new SendMessageInteractor(
-                conversationStore, messageStore, generationStore, modelGateway, auditPort, clock, 2048);
+                conversationStore, messageStore, generationStore, modelGateway, noOpQuota, auditPort, clock, 2048);
         streamMessage = new StreamMessageGenerationInteractor(
-                conversationStore, messageStore, generationStore, activeRegistry, modelGateway, auditPort, clock, 2048);
+                conversationStore, messageStore, generationStore, activeRegistry, modelGateway,
+                noOpQuota, auditPort, clock, 2048);
         cancelGeneration = new CancelGenerationInteractor(
                 conversationStore, generationStore, activeRegistry, auditPort, clock);
     }

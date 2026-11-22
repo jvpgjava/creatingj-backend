@@ -14,11 +14,18 @@ import io.github.jvpgjava.creatingj.conversation.domain.ChatMessage;
 import io.github.jvpgjava.creatingj.conversation.domain.Conversation;
 import io.github.jvpgjava.creatingj.conversation.domain.Generation;
 import io.github.jvpgjava.creatingj.conversation.domain.MessageRole;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase.RecordUsageCommand;
 import io.github.jvpgjava.creatingj.inference.application.port.out.ModelGatewayPort;
 import io.github.jvpgjava.creatingj.inference.domain.GenerationRequest;
 import io.github.jvpgjava.creatingj.inference.domain.ModelCompletionResult;
 import io.github.jvpgjava.creatingj.inference.domain.ModelProviderException;
+import io.github.jvpgjava.creatingj.inference.domain.PromptMessage;
+import io.github.jvpgjava.creatingj.inference.domain.TokenUsage;
+import io.github.jvpgjava.creatingj.inference.domain.UsageOutcome;
+import io.github.jvpgjava.creatingj.inference.domain.UsageSource;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +38,7 @@ public final class SendMessageInteractor implements SendMessageUseCase {
     private final MessageStorePort messageStore;
     private final GenerationStorePort generationStore;
     private final ModelGatewayPort modelGateway;
+    private final EnforceQuotaAndRecordUsageUseCase quotaUsage;
     private final AuditPort auditPort;
     private final ClockPort clock;
     private final int defaultMaxTokens;
@@ -40,6 +48,7 @@ public final class SendMessageInteractor implements SendMessageUseCase {
             MessageStorePort messageStore,
             GenerationStorePort generationStore,
             ModelGatewayPort modelGateway,
+            EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clock,
             int defaultMaxTokens
@@ -48,6 +57,7 @@ public final class SendMessageInteractor implements SendMessageUseCase {
         this.messageStore = messageStore;
         this.generationStore = generationStore;
         this.modelGateway = modelGateway;
+        this.quotaUsage = quotaUsage;
         this.auditPort = auditPort;
         this.clock = clock;
         this.defaultMaxTokens = defaultMaxTokens;
@@ -58,7 +68,9 @@ public final class SendMessageInteractor implements SendMessageUseCase {
         Conversation conversation = conversationStore.findByIdAndOwner(command.conversationId(), command.actorUserId())
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Conversa nao encontrada."));
 
-        Instant now = clock.now();
+        quotaUsage.acquirePermit(command.actorUserId());
+        Instant startedAt = clock.now();
+
         int userSeq = messageStore.nextSequenceNumber(conversation.id());
         ChatMessage userMessage = messageStore.save(ChatMessage.create(
                 UUID.randomUUID(),
@@ -66,7 +78,7 @@ public final class SendMessageInteractor implements SendMessageUseCase {
                 MessageRole.USER,
                 command.content(),
                 userSeq,
-                now
+                startedAt
         ));
 
         Generation generation = generationStore.save(Generation.streaming(
@@ -75,23 +87,32 @@ public final class SendMessageInteractor implements SendMessageUseCase {
                 command.actorUserId(),
                 userMessage.id(),
                 conversation.modelId(),
-                now
+                startedAt
         ));
 
         List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
+        List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
+        int promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
         GenerationRequest request = new GenerationRequest(
                 conversation.modelId(),
-                PromptWindowAssembler.assemble(history),
+                promptMessages,
                 defaultMaxTokens,
                 DEFAULT_TEMPERATURE
         );
 
+        TokenUsage reportedUsage = TokenUsage.empty();
+        int completionChars = 0;
+        UsageOutcome outcome = UsageOutcome.FAILED;
         try {
             ModelCompletionResult completion = modelGateway.complete(request);
             Instant finishedAt = clock.now();
             String assistantContent = (completion.content() == null || completion.content().isBlank())
                     ? "(sem resposta textual)"
                     : completion.content();
+
+            reportedUsage = completion.usage();
+            completionChars = assistantContent.length();
+            outcome = UsageOutcome.COMPLETED;
 
             int assistantSeq = messageStore.nextSequenceNumber(conversation.id());
             ChatMessage assistantMessage = messageStore.save(ChatMessage.create(
@@ -121,6 +142,20 @@ public final class SendMessageInteractor implements SendMessageUseCase {
                     failedAt
             ));
             throw new DomainException(code, ex.getMessage(), ex);
+        } finally {
+            long latencyMs = Math.max(0L, Duration.between(startedAt, clock.now()).toMillis());
+            quotaUsage.recordAndRelease(new RecordUsageCommand(
+                    command.actorUserId(),
+                    conversation.id().value(),
+                    generation.id(),
+                    conversation.modelId(),
+                    UsageSource.CHAT_SYNC,
+                    reportedUsage,
+                    promptChars,
+                    completionChars,
+                    latencyMs,
+                    outcome
+            ));
         }
     }
 }

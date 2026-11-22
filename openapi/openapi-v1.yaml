@@ -7,17 +7,68 @@ servers:
 - url: /
   description: Same origin
 tags:
+- name: Usage
+  description: Consulta de consumo proprio e limites configurados
 - name: Account Access
   description: "Ativacao de convite, login por sessao e redefinicao de senha"
 - name: Multi-Client Auth
   description: "Sessao web por cookie/CSRF, PKCE S256 para apps publicos e sessoes"
 - name: Conversations
   description: "Conversas, historico, chat sincrono, streaming SSE e cancelamento"
+- name: Admin Usage
+  description: Visao administrativa de consumo e configuracao de quotas (restrito
+    a ADMIN)
 - name: System
   description: Diagnostico basico e metadados publicos da API v1
 - name: Admin Users
   description: Gestao administrativa de contas CreatingJ (restrito a ADMIN)
 paths:
+  /api/v1/admin/users/{userId}/quota:
+    put:
+      tags:
+      - Admin Usage
+      summary: Configurar quotas diarias e limite de concorrencia de um usuario
+      operationId: updateUserQuota
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserQuotaRequest"
+        required: true
+      responses:
+        "200":
+          description: Quota atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserQuotaResponse"
+        "400":
+          description: Limites invalidos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: Sem privilegio administrativo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Usuario nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/conversations:
     get:
       tags:
@@ -635,6 +686,29 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
       security:
       - bearerAuth: []
+  /api/v1/usage/me:
+    get:
+      tags:
+      - Usage
+      summary: "Consultar consumo diario, limites e registros recentes do usuario\
+        \ autenticado"
+      operationId: getOwnUsageSummary
+      responses:
+        "200":
+          description: Resumo de consumo retornado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageSummaryResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/system/status:
     get:
       tags:
@@ -737,6 +811,34 @@ paths:
       security:
       - bearerAuth: []
       - cookieAuth: []
+  /api/v1/admin/usage:
+    get:
+      tags:
+      - Admin Usage
+      summary: Consultar consumo agregado diario da plataforma
+      operationId: getAdminUsageOverview
+      responses:
+        "200":
+          description: Visao agregada de consumo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsageOverviewResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: Sem privilegio administrativo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/auth/sessions/{sessionId}:
     delete:
       tags:
@@ -769,6 +871,60 @@ paths:
       - cookieAuth: []
 components:
   schemas:
+    UpdateUserQuotaRequest:
+      type: object
+      properties:
+        dailyTokenLimit:
+          type: integer
+          format: int64
+          maximum: 100000000
+          minimum: 1
+        dailyRequestLimit:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 1
+        maxConcurrentGenerations:
+          type: integer
+          format: int32
+          maximum: 50
+          minimum: 1
+    UserQuotaResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        dailyTokenLimit:
+          type: integer
+          format: int64
+        dailyRequestLimit:
+          type: integer
+          format: int32
+        maxConcurrentGenerations:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: {}
     CreateConversationRequest:
       type: object
       properties:
@@ -797,25 +953,6 @@ components:
         updatedAt:
           type: string
           format: date-time
-    ProblemDetail:
-      type: object
-      properties:
-        type:
-          type: string
-          format: uri
-        title:
-          type: string
-        status:
-          type: integer
-          format: int32
-        detail:
-          type: string
-        instance:
-          type: string
-          format: uri
-        properties:
-          type: object
-          additionalProperties: {}
     SendMessageRequest:
       type: object
       properties:
@@ -1120,6 +1257,65 @@ components:
         suspendedAt:
           type: string
           format: date-time
+    UsageRecordResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        generationId:
+          type: string
+        modelId:
+          type: string
+        source:
+          type: string
+        promptTokens:
+          type: integer
+          format: int32
+        completionTokens:
+          type: integer
+          format: int32
+        totalTokens:
+          type: integer
+          format: int32
+        estimated:
+          type: boolean
+        latencyMs:
+          type: integer
+          format: int64
+        outcome:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+    UsageSummaryResponse:
+      type: object
+      properties:
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        usedTokens:
+          type: integer
+          format: int64
+        usedRequests:
+          type: integer
+          format: int64
+        remainingTokens:
+          type: integer
+          format: int64
+        remainingRequests:
+          type: integer
+          format: int64
+        quota:
+          $ref: "#/components/schemas/UserQuotaResponse"
+        recentRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageRecordResponse"
     SystemStatusResponse:
       type: object
       properties:
@@ -1213,6 +1409,21 @@ components:
           type: integer
           format: int32
         totalElements:
+          type: integer
+          format: int64
+    AdminUsageOverviewResponse:
+      type: object
+      properties:
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        totalTokensToday:
+          type: integer
+          format: int64
+        totalRequestsToday:
           type: integer
           format: int64
   securitySchemes:

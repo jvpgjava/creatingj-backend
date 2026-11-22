@@ -22,6 +22,10 @@ import io.github.jvpgjava.creatingj.identity.domain.InvitationPurpose;
 import io.github.jvpgjava.creatingj.identity.domain.User;
 import io.github.jvpgjava.creatingj.identity.domain.UserId;
 import io.github.jvpgjava.creatingj.identity.domain.UserSession;
+import io.github.jvpgjava.creatingj.inference.application.port.out.UsageRecordStorePort;
+import io.github.jvpgjava.creatingj.inference.application.port.out.UserQuotaStorePort;
+import io.github.jvpgjava.creatingj.inference.domain.UsageRecord;
+import io.github.jvpgjava.creatingj.inference.domain.UserQuota;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
@@ -264,6 +268,76 @@ public class TestInMemoryStoresConfig {
             @Override
             public List<Generation> findByConversationOrderByCreatedAtDesc(ConversationId conversationId) {
                 return store.values().stream().filter(g -> g.conversationId().equals(conversationId)).toList();
+            }
+        };
+    }
+
+    @Bean
+    public UserQuotaStorePort testUserQuotaStorePort() {
+        return new UserQuotaStorePort() {
+            private final Map<UserId, UserQuota> store = new ConcurrentHashMap<>();
+
+            @Override
+            public Optional<UserQuota> findByUserId(UserId userId) {
+                return Optional.ofNullable(store.get(userId));
+            }
+
+            @Override
+            public UserQuota save(UserQuota quota) {
+                store.put(quota.userId(), quota);
+                return quota;
+            }
+        };
+    }
+
+    @Bean
+    public UsageRecordStorePort testUsageRecordStorePort() {
+        return new UsageRecordStorePort() {
+            private final List<UsageRecord> records = new CopyOnWriteArrayList<>();
+
+            @Override
+            public UsageRecord save(UsageRecord record) {
+                records.add(record);
+                return record;
+            }
+
+            @Override
+            public long sumTokensByUserBetween(UserId userId, Instant startInclusive, Instant endExclusive) {
+                return records.stream()
+                        .filter(r -> r.userId().equals(userId)
+                                && !r.recordedAt().isBefore(startInclusive)
+                                && r.recordedAt().isBefore(endExclusive))
+                        .mapToLong(UsageRecord::totalTokens)
+                        .sum();
+            }
+
+            @Override
+            public long countRequestsByUserBetween(UserId userId, Instant startInclusive, Instant endExclusive) {
+                return records.stream()
+                        .filter(r -> r.userId().equals(userId)
+                                && !r.recordedAt().isBefore(startInclusive)
+                                && r.recordedAt().isBefore(endExclusive))
+                        .count();
+            }
+
+            @Override
+            public List<UsageRecord> findRecentByUser(UserId userId, int limit) {
+                return records.stream().filter(r -> r.userId().equals(userId)).limit(limit).toList();
+            }
+
+            @Override
+            public long sumAllTokensBetween(Instant startInclusive, Instant endExclusive) {
+                return records.stream()
+                        .filter(r -> !r.recordedAt().isBefore(startInclusive) && r.recordedAt().isBefore(endExclusive))
+                        .mapToLong(UsageRecord::totalTokens)
+                        .sum();
+            }
+
+            @Override
+            public long countAllRequestsBetween(Instant startInclusive, Instant endExclusive) {
+                return records.stream()
+                        .filter(r -> !r.recordedAt().isBefore(startInclusive) && r.recordedAt().isBefore(endExclusive))
+                        .count();
             }
         };
     }

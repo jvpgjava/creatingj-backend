@@ -19,6 +19,7 @@ import io.github.jvpgjava.creatingj.conversation.application.usecase.GetConversa
 import io.github.jvpgjava.creatingj.conversation.application.usecase.ListConversationsInteractor;
 import io.github.jvpgjava.creatingj.conversation.application.usecase.SendMessageInteractor;
 import io.github.jvpgjava.creatingj.conversation.application.usecase.StreamMessageGenerationInteractor;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase;
 import io.github.jvpgjava.creatingj.inference.application.port.out.ModelGatewayPort;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -58,12 +59,14 @@ public class ConversationBeansConfig {
             MessageStorePort messageStore,
             GenerationStorePort generationStore,
             ModelGatewayPort modelGateway,
+            EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clockPort,
             @Value("${creatingj.provider.ai.default-max-tokens:2048}") int defaultMaxTokens
     ) {
         return new SendMessageInteractor(
-                conversationStore, messageStore, generationStore, modelGateway, auditPort, clockPort, defaultMaxTokens);
+                conversationStore, messageStore, generationStore, modelGateway, quotaUsage,
+                auditPort, clockPort, defaultMaxTokens);
     }
 
     @Bean
@@ -73,12 +76,13 @@ public class ConversationBeansConfig {
             GenerationStorePort generationStore,
             ActiveGenerationRegistryPort activeRegistry,
             ModelGatewayPort modelGateway,
+            EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clockPort,
             @Value("${creatingj.provider.ai.default-max-tokens:2048}") int defaultMaxTokens
     ) {
         return new StreamMessageGenerationInteractor(
-                conversationStore, messageStore, generationStore, activeRegistry, modelGateway,
+                conversationStore, messageStore, generationStore, activeRegistry, modelGateway, quotaUsage,
                 auditPort, clockPort, defaultMaxTokens);
     }
 

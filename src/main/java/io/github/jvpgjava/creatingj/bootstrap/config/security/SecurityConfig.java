@@ -37,6 +37,7 @@ public class SecurityConfig {
     private final AuthRateLimitFilter authRateLimitFilter;
     private final SessionAuthenticationFilter sessionAuthenticationFilter;
     private final CsrfCookieProtectionFilter csrfCookieProtectionFilter;
+    private final ConversationRateLimitFilter conversationRateLimitFilter;
     private final CorsProperties corsProperties;
     private final boolean publicDocsEnabled;
 
@@ -46,6 +47,7 @@ public class SecurityConfig {
             AuthRateLimitFilter authRateLimitFilter,
             SessionAuthenticationFilter sessionAuthenticationFilter,
             CsrfCookieProtectionFilter csrfCookieProtectionFilter,
+            ConversationRateLimitFilter conversationRateLimitFilter,
             CorsProperties corsProperties,
             @Value("${creatingj.docs.public-access:false}") boolean publicDocsEnabled
     ) {
@@ -54,6 +56,7 @@ public class SecurityConfig {
         this.authRateLimitFilter = authRateLimitFilter;
         this.sessionAuthenticationFilter = sessionAuthenticationFilter;
         this.csrfCookieProtectionFilter = csrfCookieProtectionFilter;
+        this.conversationRateLimitFilter = conversationRateLimitFilter;
         this.corsProperties = corsProperties;
         this.publicDocsEnabled = publicDocsEnabled;
     }
@@ -70,6 +73,7 @@ public class SecurityConfig {
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(sessionAuthenticationFilter, AuthRateLimitFilter.class)
                 .addFilterAfter(csrfCookieProtectionFilter, SessionAuthenticationFilter.class)
+                .addFilterAfter(conversationRateLimitFilter, CsrfCookieProtectionFilter.class)
                 .headers(headers -> headers
                         .contentTypeOptions(contentType -> { })
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
@@ -101,6 +105,7 @@ public class SecurityConfig {
                             "/api/v1/auth/password-reset/confirm"
                     ).permitAll();
                     auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
+                    auth.requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN");
                     if (publicDocsEnabled) {
                         auth.requestMatchers(HttpMethod.GET, "/api-docs", "/api-docs/**", "/api-docs.yaml/**")
                                 .permitAll();

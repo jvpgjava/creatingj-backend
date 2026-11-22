@@ -16,12 +16,19 @@ import io.github.jvpgjava.creatingj.conversation.domain.Conversation;
 import io.github.jvpgjava.creatingj.conversation.domain.Generation;
 import io.github.jvpgjava.creatingj.conversation.domain.GenerationStreamEvent;
 import io.github.jvpgjava.creatingj.conversation.domain.MessageRole;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase;
+import io.github.jvpgjava.creatingj.inference.application.port.in.EnforceQuotaAndRecordUsageUseCase.RecordUsageCommand;
 import io.github.jvpgjava.creatingj.inference.application.port.out.ModelGatewayPort;
 import io.github.jvpgjava.creatingj.inference.domain.GenerationRequest;
 import io.github.jvpgjava.creatingj.inference.domain.ModelCompletionResult;
 import io.github.jvpgjava.creatingj.inference.domain.ModelProviderException;
+import io.github.jvpgjava.creatingj.inference.domain.PromptMessage;
 import io.github.jvpgjava.creatingj.inference.domain.ProviderFailureKind;
+import io.github.jvpgjava.creatingj.inference.domain.TokenUsage;
+import io.github.jvpgjava.creatingj.inference.domain.UsageOutcome;
+import io.github.jvpgjava.creatingj.inference.domain.UsageSource;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +44,7 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
     private final GenerationStorePort generationStore;
     private final ActiveGenerationRegistryPort activeRegistry;
     private final ModelGatewayPort modelGateway;
+    private final EnforceQuotaAndRecordUsageUseCase quotaUsage;
     private final AuditPort auditPort;
     private final ClockPort clock;
     private final int defaultMaxTokens;
@@ -47,6 +55,7 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
             GenerationStorePort generationStore,
             ActiveGenerationRegistryPort activeRegistry,
             ModelGatewayPort modelGateway,
+            EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clock,
             int defaultMaxTokens
@@ -56,6 +65,7 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         this.generationStore = generationStore;
         this.activeRegistry = activeRegistry;
         this.modelGateway = modelGateway;
+        this.quotaUsage = quotaUsage;
         this.auditPort = auditPort;
         this.clock = clock;
         this.defaultMaxTokens = defaultMaxTokens;
@@ -66,7 +76,9 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         Conversation conversation = conversationStore.findByIdAndOwner(command.conversationId(), command.actorUserId())
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Conversa nao encontrada."));
 
-        Instant now = clock.now();
+        quotaUsage.acquirePermit(command.actorUserId());
+        Instant startedAt = clock.now();
+
         int userSeq = messageStore.nextSequenceNumber(conversation.id());
         ChatMessage userMessage = messageStore.save(ChatMessage.create(
                 UUID.randomUUID(),
@@ -74,7 +86,7 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
                 MessageRole.USER,
                 command.content(),
                 userSeq,
-                now
+                startedAt
         ));
 
         UUID generationId = UUID.randomUUID();
@@ -84,13 +96,15 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
                 command.actorUserId(),
                 userMessage.id(),
                 conversation.modelId(),
-                now
+                startedAt
         ));
 
         List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
+        List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
+        int promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
         GenerationRequest request = new GenerationRequest(
                 conversation.modelId(),
-                PromptWindowAssembler.assemble(history),
+                promptMessages,
                 defaultMaxTokens,
                 DEFAULT_TEMPERATURE
         );
@@ -98,6 +112,8 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         activeRegistry.register(generationId);
         AtomicInteger eventSeq = new AtomicInteger(1);
         StringBuilder partial = new StringBuilder();
+        TokenUsage reportedUsage = TokenUsage.empty();
+        UsageOutcome outcome = UsageOutcome.FAILED;
         try {
             sink.accept(GenerationStreamEvent.started(generationId, eventSeq.getAndIncrement()));
 
@@ -121,6 +137,9 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
                 finalContent = "(sem resposta textual)";
             }
 
+            reportedUsage = result.usage();
+            outcome = UsageOutcome.COMPLETED;
+
             int assistantSeq = messageStore.nextSequenceNumber(conversation.id());
             ChatMessage assistantMessage = messageStore.save(ChatMessage.create(
                     UUID.randomUUID(),
@@ -138,6 +157,7 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         } catch (ModelProviderException ex) {
             Instant endedAt = clock.now();
             if (ex.failureKind() == ProviderFailureKind.CANCELLED || activeRegistry.isCancelled(generationId)) {
+                outcome = UsageOutcome.CANCELLED;
                 UUID partialMsgId = persistPartialIfPresent(conversation, partial.toString(), endedAt);
                 generationStore.save(generation.cancel(partialMsgId, endedAt));
                 sink.accept(GenerationStreamEvent.cancelled(generationId, eventSeq.getAndIncrement()));
@@ -157,6 +177,19 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
             }
         } finally {
             activeRegistry.unregister(generationId);
+            long latencyMs = Math.max(0L, Duration.between(startedAt, clock.now()).toMillis());
+            quotaUsage.recordAndRelease(new RecordUsageCommand(
+                    command.actorUserId(),
+                    conversation.id().value(),
+                    generationId,
+                    conversation.modelId(),
+                    UsageSource.CHAT_STREAM,
+                    reportedUsage,
+                    promptChars,
+                    partial.length(),
+                    latencyMs,
+                    outcome
+            ));
         }
     }
 
