@@ -6,16 +6,20 @@ import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
 import io.github.jvpgjava.creatingj.knowledge.adapter.out.embedding.DeterministicHashedEmbeddingAdapter;
 import io.github.jvpgjava.creatingj.knowledge.domain.ContentHasher;
 import io.github.jvpgjava.creatingj.knowledge.domain.EmbeddingVector;
+import io.github.jvpgjava.creatingj.knowledge.domain.HybridRagRanker;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunkId;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJobId;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIngestionPolicy;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSearchMatch;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceId;
 import io.github.jvpgjava.creatingj.knowledge.domain.RagContextFormatter;
+import io.github.jvpgjava.creatingj.knowledge.domain.RagSufficiencyEvaluator;
+import io.github.jvpgjava.creatingj.knowledge.domain.RagSufficiencyEvaluator.RagSufficiencyLevel;
 import io.github.jvpgjava.creatingj.knowledge.domain.TextChunker;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -259,5 +263,56 @@ class KnowledgeDomainAndPolicyTest {
                 .isInstanceOf(DomainException.class);
 
         assertThat(TextChunker.split("a".repeat(250), 100, 20)).hasSizeGreaterThan(2);
+
+        String mdDoc = "# Arquitetura\n\n## Autenticacao\n\n"
+                + ("O login web utiliza cookie HttpOnly CREATINGJ_SESSION e CSRF X-XSRF-TOKEN.\n\n").repeat(12);
+        List<String> mdChunks = TextChunker.split(mdDoc, 300, 40);
+        assertThat(mdChunks).hasSizeGreaterThan(2);
+        assertThat(mdChunks.get(1)).contains("[Secao: Arquitetura > Autenticacao]");
+
+        String relaxed = HybridRagRanker.buildRelaxedWebsearchQuery(
+                "Como funciona a autenticacao PKCE e o cookie HttpOnly no login?"
+        );
+        assertThat(relaxed).contains("autenticacao").contains(" OR ").doesNotContain(" como ");
+
+        var s1 = KnowledgeSourceId.random();
+        var s2 = KnowledgeSourceId.random();
+        var vecM1 = new KnowledgeSearchMatch(s1, "docs/auth.md", "Auth", 0, "PKCE S256 login", 0.78, "v1");
+        var vecM2 = new KnowledgeSearchMatch(s2, "docs/db.md", "DB", 0, "PostgreSQL pgvector", 0.72, "v1");
+        var lexM1 = new KnowledgeSearchMatch(s1, "docs/auth.md", "Auth", 0, "PKCE S256 login", 0.78, "v1");
+        var sibling = new KnowledgeSearchMatch(s1, "docs/auth.md", "Auth", 1, "Refresh token rotation", 0.65, "v1");
+
+        List<KnowledgeSearchMatch> fused = HybridRagRanker.fuseVectorAndLexical(
+                List.of(vecM1, vecM2),
+                List.of(lexM1),
+                5,
+                0.30
+        );
+        assertThat(fused).hasSize(2);
+        assertThat(fused.get(0).sourceId()).isEqualTo(s1);
+        assertThat(fused.get(0).score()).isGreaterThan(0.78);
+
+        List<KnowledgeSearchMatch> expanded = HybridRagRanker.expandSmallDocumentSiblings(
+                List.of(fused.get(0)),
+                List.of(vecM1, sibling, vecM2),
+                Map.of(s1, 2, s2, 10),
+                5
+        );
+        assertThat(expanded).hasSize(2);
+        assertThat(expanded.get(1).chunkIndex()).isEqualTo(1);
+
+        assertThat(RagSufficiencyEvaluator.evaluate("PKCE login", fused))
+                .isEqualTo(RagSufficiencyLevel.SUFFICIENT);
+        var lowMatch = new KnowledgeSearchMatch(s1, "docs/a.md", "A", 0, "texto curto", 0.35, "v1");
+        assertThat(RagSufficiencyEvaluator.evaluate("termo ausente xyz", List.of(lowMatch)))
+                .isEqualTo(RagSufficiencyLevel.PARTIAL);
+        var veryLow = new KnowledgeSearchMatch(s1, "docs/a.md", "A", 0, "nada", 0.10, "v1");
+        assertThat(RagSufficiencyEvaluator.evaluate("termo inexistente", List.of(veryLow)))
+                .isEqualTo(RagSufficiencyLevel.INSUFFICIENT);
+        assertThat(RagSufficiencyEvaluator.evaluate("qualquer", List.of()))
+                .isEqualTo(RagSufficiencyLevel.INSUFFICIENT);
+
+        String withSufficiency = RagContextFormatter.formatUntrustedContext("PKCE login", fused, 1500);
+        assertThat(withSufficiency).contains("[T1]").contains("Suficiencia do contexto RAG: SUFICIENTE");
     }
 }

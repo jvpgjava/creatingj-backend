@@ -17,20 +17,33 @@ public final class RagContextFormatter {
     }
 
     public static String formatUntrustedContext(List<KnowledgeSearchMatch> matches, int maxChars) {
+        return formatUntrustedContext(null, matches, maxChars);
+    }
+
+    public static String formatUntrustedContext(
+            String queryText,
+            List<KnowledgeSearchMatch> matches,
+            int maxChars
+    ) {
         if (matches == null || matches.isEmpty()) {
             return "";
         }
-        int budget = Math.max(HEADER.length() + FOOTER.length() + 64, maxChars);
+        String sufficiencyNote = queryText == null || queryText.isBlank()
+                ? ""
+                : RagSufficiencyEvaluator.guidanceNote(RagSufficiencyEvaluator.evaluate(queryText, matches)) + "\n";
+        int reservedFooter = sufficiencyNote.length() + FOOTER.length();
+        int budget = Math.max(HEADER.length() + reservedFooter + 64, maxChars);
         StringBuilder sb = new StringBuilder();
         sb.append(HEADER);
-        for (KnowledgeSearchMatch match : matches) {
+        for (int i = 0; i < matches.size(); i++) {
+            KnowledgeSearchMatch match = matches.get(i);
             String sanitizedExcerpt = match.excerpt()
                     .replace("</untrusted_rag_context>", "[removed-tag]")
                     .replace("<untrusted_rag_context>", "[removed-tag]");
-            String entry = "[source=" + match.sourcePath() + "#chunk-" + match.chunkIndex() + "]\n"
+            String entry = "[T" + (i + 1) + "] [source=" + match.sourcePath() + "#chunk-" + match.chunkIndex() + "]\n"
                     + sanitizedExcerpt + "\n\n";
-            if (sb.length() + entry.length() + FOOTER.length() > budget) {
-                int remaining = budget - sb.length() - FOOTER.length();
+            if (sb.length() + entry.length() + reservedFooter > budget) {
+                int remaining = budget - sb.length() - reservedFooter;
                 if (remaining > 32) {
                     sb.append(entry, 0, remaining - 4).append("...\n");
                 }
@@ -38,6 +51,7 @@ public final class RagContextFormatter {
             }
             sb.append(entry);
         }
+        sb.append(sufficiencyNote);
         sb.append(FOOTER);
         return sb.toString();
     }

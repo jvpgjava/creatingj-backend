@@ -39,40 +39,42 @@ public final class PromptSecurityGuard {
                     + "\\b(?:obedec\\w*|siga|execut\\w*|faca|follow|obey|execute)\\b"
     );
 
-    private static final List<Pattern> INJECTION_PATTERNS = List.of(
-            Pattern.compile("\\b(?:ignor\\w*|esquec\\w*|desconsider\\w*|descart\\w*|desobedec\\w*)\\b"
-                    + "(?:\\s+\\w+){0,4}?\\s+(?:instruc\\w*|regras?|ordens|diretrizes|restric\\w*|prompt|guardrails?)"),
-            Pattern.compile("\\b(?:ignore|disregard|forget|bypass|override)\\b(?:\\s+\\w+){0,4}?\\s+"
-                    + "(?:instructions?|rules?|prompt|guidelines|directives|safety|guardrails?)"),
-            Pattern.compile("\\b(?:do anything now|dan mode|atue como dan|voce agora e (?:a )?dan|jailbreak\\w*|"
-                    + "developer mode|god mode|sudo mode|modo (?:desenvolvedor|dev|deus|sem filtros?|irrestrito))\\b"),
-            Pattern.compile("\\b(?:responda|aja|atue|fale|funcione) sem (?:nenhuma |qualquer )?"
-                    + "(?:regras?|restricoes|filtros?|censura|limites?)\\b"),
-            Pattern.compile("\\b(?:finj[ae]|faca de conta|aja como se|pretend)\\b[^.!?\\n]{0,40}"
-                    + "\\b(?:nao (?:tem|exist\\w*|houvesse) regras|sem restric\\w*|unrestricted|no rules)\\b"),
-            Pattern.compile("\\b(?:confirme|confirm|diga|say)\\b[^.!?\\n]{0,30}"
-                    + "\\b(?:dan ativad[ao]|modo desenvolvedor ativado|developer mode enabled)\\b")
-    );
-
-    private static final List<Pattern> EXTRACTION_PATTERNS = List.of(
-            Pattern.compile("\\b(?:mostr\\w*|revel\\w*|repit\\w*|exib\\w*|imprim\\w*|traduz\\w*|codifiq\\w*|"
+    private static final Pattern EXTRACTION_PATTERN = Pattern.compile(
+            "\\b(?:mostr\\w*|revel\\w*|repit\\w*|exib\\w*|imprim\\w*|traduz\\w*|codifiq\\w*|"
                     + "reveal|show|print|repeat|output|translate|encode|dump)\\b(?:\\s+\\w+){0,5}?\\s+"
                     + "(?:(?:suas?|seus?|tuas?|your|the|o|seu)(?:\\s+\\w+){0,2}?\\s+"
                     + "(?:instruc\\w*|regras|rules?|prompt|diretrizes|guidelines|system prompt|system message)"
-                    + "|system prompt\\b|prompt (?:do|de) sistema\\b|prompt inicial\\b)"),
-            Pattern.compile("\\b(?:quais sao|what are)\\b(?:\\s+\\w+){0,3}?\\s+"
+                    + "|system prompt\\b|prompt (?:do|de) sistema\\b|prompt inicial\\b)"
+                    + "|\\b(?:quais sao|what are)\\b(?:\\s+\\w+){0,3}?\\s+"
                     + "(?:suas? (?:instruc\\w*|regras) (?:internas?|ocultas?|secretas?|iniciais)"
-                    + "|your system prompt)\\b")
+                    + "|your system prompt)\\b"
     );
 
-    private static final List<Pattern> MALICIOUS_CODE_PATTERNS = List.of(
-            Pattern.compile("\\b(?:escrev\\w*|crie\\w*|ger\\w*|fac\\w*|desenvolv\\w*|monte\\w*|implement\\w*|"
+    private static final Pattern INJECTION_PATTERN = Pattern.compile(
+            "\\b(?:ignor\\w*|esquec\\w*|desconsider\\w*|descart\\w*|desobedec\\w*)\\b"
+                    + "(?:\\s+\\w+){0,4}?\\s+(?:instruc\\w*|regras?|ordens|diretrizes|restric\\w*|prompt|guardrails?)"
+                    + "|\\b(?:ignore|disregard|forget|bypass|override)\\b(?:\\s+\\w+){0,4}?\\s+"
+                    + "(?:instructions?|rules?|prompt|guidelines|directives|safety|guardrails?)"
+                    + "|\\b(?:do anything now|dan mode|atue como dan|voce agora e (?:a )?dan|jailbreak\\w*|"
+                    + "developer mode|god mode|sudo mode|modo (?:desenvolvedor|dev|deus|sem filtros?|irrestrito))\\b"
+                    + "|\\b(?:responda|aja|atue|fale|funcione) sem (?:nenhuma |qualquer )?"
+                    + "(?:regras?|restricoes|filtros?|censura|limites?)\\b"
+                    + "|\\b(?:finj[ae]|faca de conta|aja como se|pretend)\\b[^.!?\\n]{0,40}"
+                    + "\\b(?:nao (?:tem|exist\\w*|houvesse) regras|sem restric\\w*|unrestricted|no rules)\\b"
+                    + "|\\b(?:confirme|confirm|diga|say)\\b[^.!?\\n]{0,30}"
+                    + "\\b(?:dan ativad[ao]|modo desenvolvedor ativado|developer mode enabled)\\b"
+    );
+
+    private static final Pattern MALICIOUS_CODE_PATTERN = Pattern.compile(
+            "\\b(?:escrev\\w*|crie\\w*|ger\\w*|fac\\w*|desenvolv\\w*|monte\\w*|implement\\w*|"
                     + "write|create|build|generate|code)\\b[^.!?\\n]{0,70}\\b(?:keylogger|ransomware|trojan|rootkit|"
                     + "spyware|credential stealer|cookie stealer|token stealer|botnet|reverse shell|"
-                    + "script de ddos|ataque ddos|exploit para invadir|fork bomb)\\b"),
-            Pattern.compile("\\b(?:keylogger|ransomware|credential stealer|cookie stealer)\\b[^.!?\\n]{0,60}"
-                    + "\\b(?:completo|funcional|furtivo|escondido|hidden|stealth|em python|em java|em rust|em c)\\b")
+                    + "script de ddos|ataque ddos|exploit para invadir|fork bomb)\\b"
+                    + "|\\b(?:keylogger|ransomware|credential stealer|cookie stealer)\\b[^.!?\\n]{0,60}"
+                    + "\\b(?:completo|funcional|furtivo|escondido|hidden|stealth|em python|em java|em rust|em c)\\b"
     );
+
+    private static final List<String> DECODE_HINTS = List.of("decod", "decode", "base64", "hex", "binario");
 
     private PromptSecurityGuard() {
     }
@@ -99,31 +101,25 @@ public final class PromptSecurityGuard {
         }
 
         String normalized = normalize(rawText);
-        String deLeeted = normalizeLeetspeak(normalized);
+        String target = normalized + "\n" + normalizeLeetspeak(normalized);
 
-        for (Pattern pattern : EXTRACTION_PATTERNS) {
-            if (pattern.matcher(normalized).find() || pattern.matcher(deLeeted).find()) {
-                return GuardVerdict.blocked(
-                        GuardCategory.PROMPT_EXTRACTION,
-                        "Tentativa de extracao de instrucoes internas ou system prompt bloqueada."
-                );
-            }
+        if (EXTRACTION_PATTERN.matcher(target).find()) {
+            return GuardVerdict.blocked(
+                    GuardCategory.PROMPT_EXTRACTION,
+                    "Tentativa de extracao de instrucoes internas ou system prompt bloqueada."
+            );
         }
-        for (Pattern pattern : INJECTION_PATTERNS) {
-            if (pattern.matcher(normalized).find() || pattern.matcher(deLeeted).find()) {
-                return GuardVerdict.blocked(
-                        GuardCategory.PROMPT_INJECTION,
-                        "Tentativa de manipulacao de regras ou jailbreak detectada."
-                );
-            }
+        if (INJECTION_PATTERN.matcher(target).find()) {
+            return GuardVerdict.blocked(
+                    GuardCategory.PROMPT_INJECTION,
+                    "Tentativa de manipulacao de regras ou jailbreak detectada."
+            );
         }
-        for (Pattern pattern : MALICIOUS_CODE_PATTERNS) {
-            if (pattern.matcher(normalized).find() || pattern.matcher(deLeeted).find()) {
-                return GuardVerdict.blocked(
-                        GuardCategory.MALICIOUS_CODE_REQUEST,
-                        "Solicitacao de geracao de malware ou codigo ofensivo bloqueada."
-                );
-            }
+        if (MALICIOUS_CODE_PATTERN.matcher(target).find()) {
+            return GuardVerdict.blocked(
+                    GuardCategory.MALICIOUS_CODE_REQUEST,
+                    "Solicitacao de geracao de malware ou codigo ofensivo bloqueada."
+            );
         }
         if (DECODE_AND_OBEY.matcher(normalized).find() || SPACED_LETTERS.matcher(rawText).find()) {
             return GuardVerdict.blocked(
@@ -131,65 +127,43 @@ public final class PromptSecurityGuard {
                     "Tentativa de execucao de instrucoes ofuscadas ou invertidas bloqueada."
             );
         }
-
-        if (depth == 0) {
-            GuardVerdict encodedVerdict = inspectEncodedPayloads(rawText, normalized);
-            if (encodedVerdict.blocked()) {
-                return encodedVerdict;
-            }
-        }
-        return GuardVerdict.allowed();
+        return depth == 0 ? inspectEncodedPayloads(rawText, normalized) : GuardVerdict.allowed();
     }
 
     private static GuardVerdict inspectEncodedPayloads(String rawText, String normalizedOuter) {
-        boolean asksToDecode = normalizedOuter.contains("decod")
-                || normalizedOuter.contains("decode")
-                || normalizedOuter.contains("base64")
-                || normalizedOuter.contains("hex")
-                || normalizedOuter.contains("binario");
+        boolean asksToDecode = DECODE_HINTS.stream().anyMatch(normalizedOuter::contains);
 
         Matcher b64Matcher = BASE64_RUN.matcher(rawText);
         while (b64Matcher.find()) {
             String decoded = tryDecodeBase64Text(b64Matcher.group());
-            if (decoded != null) {
-                GuardVerdict inner = inspectInternal(decoded, 1);
-                if (inner.blocked() || asksToDecode) {
-                    return GuardVerdict.blocked(
-                            GuardCategory.OBFUSCATED_PAYLOAD,
-                            "Conteudo codificado em Base64 com instrucoes bloqueadas detectado."
-                    );
-                }
+            if (isDecodedThreat(decoded, asksToDecode)) {
+                return GuardVerdict.blocked(
+                        GuardCategory.OBFUSCATED_PAYLOAD,
+                        "Conteudo codificado em Base64 com instrucoes bloqueadas detectado."
+                );
             }
         }
 
         Matcher binMatcher = BINARY_RUN.matcher(rawText);
-        if (binMatcher.find()) {
-            String decoded = tryDecodeBinaryText(binMatcher.group());
-            if (decoded != null) {
-                GuardVerdict inner = inspectInternal(decoded, 1);
-                if (inner.blocked() || asksToDecode) {
-                    return GuardVerdict.blocked(
-                            GuardCategory.OBFUSCATED_PAYLOAD,
-                            "Payload binario ofuscado detectado."
-                    );
-                }
-            }
+        if (binMatcher.find() && isDecodedThreat(tryDecodeBinaryText(binMatcher.group()), asksToDecode)) {
+            return GuardVerdict.blocked(
+                    GuardCategory.OBFUSCATED_PAYLOAD,
+                    "Payload binario ofuscado detectado."
+            );
         }
 
         Matcher hexMatcher = HEX_RUN.matcher(rawText);
-        if (hexMatcher.find()) {
-            String decoded = tryDecodeHexText(hexMatcher.group());
-            if (decoded != null) {
-                GuardVerdict inner = inspectInternal(decoded, 1);
-                if (inner.blocked() || asksToDecode) {
-                    return GuardVerdict.blocked(
-                            GuardCategory.OBFUSCATED_PAYLOAD,
-                            "Payload hexadecimal ofuscado detectado."
-                    );
-                }
-            }
+        if (hexMatcher.find() && isDecodedThreat(tryDecodeHexText(hexMatcher.group()), asksToDecode)) {
+            return GuardVerdict.blocked(
+                    GuardCategory.OBFUSCATED_PAYLOAD,
+                    "Payload hexadecimal ofuscado detectado."
+            );
         }
         return GuardVerdict.allowed();
+    }
+
+    private static boolean isDecodedThreat(String decoded, boolean asksToDecode) {
+        return decoded != null && (asksToDecode || inspectInternal(decoded, 1).blocked());
     }
 
     public static String normalize(String text) {
@@ -202,20 +176,13 @@ public final class PromptSecurityGuard {
     }
 
     private static String normalizeLeetspeak(String normalized) {
-        StringBuilder sb = new StringBuilder(normalized.length());
-        for (int i = 0; i < normalized.length(); i++) {
-            char c = normalized.charAt(i);
-            sb.append(switch (c) {
-                case '0' -> 'o';
-                case '1' -> 'i';
-                case '3' -> 'e';
-                case '4' -> 'a';
-                case '5' -> 's';
-                case '7' -> 't';
-                default -> c;
-            });
-        }
-        return sb.toString();
+        return normalized
+                .replace('0', 'o')
+                .replace('1', 'i')
+                .replace('3', 'e')
+                .replace('4', 'a')
+                .replace('5', 's')
+                .replace('7', 't');
     }
 
     private static int countInvisibleChars(String text) {
@@ -232,9 +199,6 @@ public final class PromptSecurityGuard {
         String padded = candidate.replace('-', '+').replace('_', '/') + "=".repeat(pad);
         try {
             byte[] bytes = Base64.getDecoder().decode(padded);
-            if (bytes.length < 16) {
-                return null;
-            }
             String text = new String(bytes, StandardCharsets.UTF_8);
             return isMostlyPrintableText(text) ? text : null;
         } catch (IllegalArgumentException ex) {
@@ -244,9 +208,6 @@ public final class PromptSecurityGuard {
 
     private static String tryDecodeBinaryText(String binaryRun) {
         String[] tokens = binaryRun.trim().split("\\s+");
-        if (tokens.length < 6) {
-            return null;
-        }
         byte[] bytes = new byte[tokens.length];
         for (int i = 0; i < tokens.length; i++) {
             bytes[i] = (byte) Integer.parseInt(tokens[i], 2);
@@ -257,9 +218,6 @@ public final class PromptSecurityGuard {
 
     private static String tryDecodeHexText(String hexRun) {
         String cleaned = hexRun.replaceAll("(?i)0x|[\\s,]+", "");
-        if (cleaned.length() < 24 || cleaned.length() % 2 != 0) {
-            return null;
-        }
         byte[] bytes = new byte[cleaned.length() / 2];
         for (int i = 0; i < bytes.length; i++) {
             int idx = i * 2;
@@ -270,22 +228,17 @@ public final class PromptSecurityGuard {
     }
 
     private static boolean isMostlyPrintableText(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-        int printable = 0;
         int lettersOrSpaces = 0;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if ((c >= 32 && c < 127) || Character.isLetterOrDigit(c) || c == '\n' || c == '\t') {
-                printable++;
+            if (c < 32 && c != '\n' && c != '\t') {
+                return false;
             }
             if (Character.isLetter(c) || c == ' ') {
                 lettersOrSpaces++;
             }
         }
-        return ((double) printable / text.length()) >= 0.92
-                && ((double) lettersOrSpaces / text.length()) >= 0.65;
+        return text.length() >= 12 && ((double) lettersOrSpaces / text.length()) >= 0.65;
     }
 
     public enum GuardCategory {

@@ -34,7 +34,7 @@ Backend principal da plataforma **CreatingJ**, desenvolvido como um **monólito 
 | **`conversation`** | Conversas isoladas por usuário, histórico persistido, chat síncrono, streaming SSE (`text/event-stream`) e cancelamento de geração em andamento. |
 | **`inference`** | Gateway HTTP compatível com OpenAI (`/v1/chat/completions`), medição de tokens/latência, cotas diárias, limite de concorrência, rate limit e métricas Micrometer. |
 | **`project`** | CRUD de projetos isolados por proprietário com slug único e exclusão em cascata. |
-| **`knowledge`** | RAG por projeto com `pgvector` (índices HNSW parciais para `384`, `768`, `1024` e `1536` dimensões), bloqueio de arquivos sensíveis/segredos, chunking, deduplicação por hash SHA-256 e histórico de jobs de indexação. |
+| **`knowledge`** | RAG híbrido por projeto com `pgvector` (HNSW parcial `384`/`768`/`1024`/`1536`) + Full-Text Search `tsvector` (`GIN`) com fusão RRF (`k=60`), expansão de chunks irmãos em documentos curtos, chunking estruturado com breadcrumbs de seções Markdown (`[Secao: ...]`), avaliador de suficiência de contexto (`SUFFICIENT`/`PARTIAL`/`INSUFFICIENT`), bloqueio de segredos e deduplicação SHA-256. |
 | **`agent`** | Planejamento de agente com contexto de workspace e RAG, avaliado por motor determinístico de política de ferramentas (`ALLOW`, `REQUIRE_APPROVAL`, `DENY`) imune a prompt injection. |
 | **`device`** | Pareamento de dispositivos com código temporário de uso único, credencial dedicada `X-Device-Token` (`ROLE_RUNNER`), heartbeat de presença e revogação imediata. |
 | **`task`** | Fila de tarefas remotas com idempotência, lease temporário, deduplicação de eventos, aprovações pontuais com TTL e stream SSE de progresso. |
@@ -50,7 +50,7 @@ Backend principal da plataforma **CreatingJ**, desenvolvido como um **monólito 
 - **Linguagem:** Java 25 (`--release 25`)
 - **Framework:** Spring Boot `4.2.0` (WebMVC, Security, Validation, JDBC, Actuator)
 - **IA & Embeddings:** Spring AI `2.1.0` (`spring-ai-transformers` ONNX local + cliente HTTP OpenAI-compatible)
-- **Banco de Dados:** PostgreSQL 18 + extensão `pgvector` + migrations Flyway (`V1` a `V10`)
+- **Banco de Dados:** PostgreSQL 18 + extensão `pgvector` + Full-Text Search `tsvector` + migrations Flyway (`V1` a `V11`)
 - **Documentação HTTP:** Springdoc OpenAPI `3.2.1` + snapshot versionado em [`openapi/openapi-v1.yaml`](openapi/openapi-v1.yaml)
 - **Criptografia:** BouncyCastle `1.87` (Argon2id para senhas)
 - **Qualidade & Governança:** Checkstyle `14.4.0`, ArchUnit `1.5.1`, JaCoCo `0.8.16`, CI/CD via [`Jenkinsfile`](Jenkinsfile)
@@ -112,7 +112,7 @@ CREATE DATABASE creatingj;
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-> As migrations Flyway (`V1` até `V10`) são aplicadas automaticamente na primeira inicialização da aplicação.
+> As migrations Flyway (`V1` até `V11`) são aplicadas automaticamente na primeira inicialização da aplicação.
 
 ### 3. Criar o arquivo `.env` na raiz do projeto
 
@@ -341,7 +341,8 @@ $env:CREATINGJ_DB_PASSWORD="postgres"
 - **Isolamento de Runner:** credenciais `X-Device-Token` (`ROLE_RUNNER`) são aceitas estritamente em `/api/v1/runner/**`.
 - **Anti-SSRF & Guardrails Multicamada de IA:**
   - **Guarda de Entrada L0 (`PromptSecurityGuard`):** bloqueio determinístico (com normalização NFKD sem acentos e anti-leetspeak) de prompt injection, sequestro de persona (`DAN` / `developer mode`), extração de system prompt, payloads ofuscados (Base64, binário, hexadecimal, letras espaçadas, caracteres invisíveis Unicode) e solicitações de malware/exploits ofensivos — curto-circuitando antes de consumir requisição do provedor.
-  - **Guarda de Saída (`OutputSecurityGuard`):** redação automática de segredos/chaves (`[REDACTED_SECRET]`), remoção de referências internas de RAG (`[T1]`), neutralização de comandos destrutivos (`rm -rf /`, fork bombs) e bloqueio de vazamento de instruções internas.
+  - **Guarda de Saída e Streaming em Blocos (`OutputSecurityGuard` + `StreamingBlockOutputGuard`):** redação automática de segredos/chaves (`[REDACTED_SECRET]`), remoção de referências internas de RAG (`[T1]`), neutralização de comandos destrutivos (`rm -rf /`, fork bombs) e retenção adaptativa em blocos durante o streaming SSE para impedir vazamento antes de exibir na tela.
+  - **RAG Híbrido, Reescrita Multi-Turno e Suficiência (`HybridRagRanker` + `StandaloneQueryBuilder` + `RagSufficiencyEvaluator` + `FollowUpSuggestionEngine`):** fusão Reciprocal Rank Fusion (`pgvector` + `tsvector`), expansão de perguntas curtas de continuação, nota de suficiência de evidências e sugestões automáticas de follow-up.
   - **Política Determinística de Ferramentas (`ToolExecutionPolicyEngine`):** proteção contra escrita em scripts executáveis, wrappers de build (`mvnw`, `gradlew`), `Dockerfile` e pipelines CI/CD (`Jenkinsfile`, `.github/**`), bloqueio de execução inline de interpretadores (`python -c`, `node -e`, `-Dexec.`) e inspeção de `diffPreview` contra segredos e `ProcessBuilder`/`Runtime.exec`.
   - **Anti-SSRF & Ingestão Segura (`KnowledgeIngestionPolicy`):** validação estrita de URLs HTTPS externas, bloqueio de arquivos sensíveis e detecção de segredos antes da vetorização no `pgvector`.
 - **Observabilidade segura:** erros sanitizados em RFC 9457 (`application/problem+json`) sem stacktraces, `traceId` correlacionado nos logs e `/api-docs/**` desabilitado em `prod`.

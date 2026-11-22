@@ -1,8 +1,11 @@
 package io.github.jvpgjava.creatingj.common;
 
+import io.github.jvpgjava.creatingj.common.domain.FollowUpSuggestionEngine;
 import io.github.jvpgjava.creatingj.common.domain.OutputSecurityGuard;
 import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard.GuardCategory;
+import io.github.jvpgjava.creatingj.common.domain.StandaloneQueryBuilder;
+import io.github.jvpgjava.creatingj.common.domain.StreamingBlockOutputGuard;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -163,5 +166,66 @@ class PromptAndOutputSecurityGuardTest {
         assertThat(promptLeak.content()).isEqualTo(PromptSecurityGuard.STANDARD_REFUSAL_MESSAGE);
 
         assertThat(OutputSecurityGuard.inspectAndSanitize(" ").content()).isEqualTo("(sem resposta textual)");
+    }
+
+    @Test
+    void shouldValidateStreamingBlocksStandaloneQueryRewriteAndFollowUpSuggestions() {
+        StreamingBlockOutputGuard streamGuard = new StreamingBlockOutputGuard();
+        assertThat(streamGuard.feed("Texto seguro inicial ")).containsExactly("Texto seguro inicial ");
+        assertThat(streamGuard.feed("com ref [T1")).isEmpty();
+        assertThat(streamGuard.feed(" · secao: Auth] e chave sk-1234567890abcdefghijklmnop.\n\nProximo bloco."))
+                .isNotEmpty();
+        List<String> tail = streamGuard.finish();
+        String full = streamGuard.releasedContent();
+        assertThat(full).doesNotContain("[T1").doesNotContain("sk-1234567890abcdefghijklmnop")
+                .contains("[REDACTED_SECRET]").contains("Proximo bloco.");
+        assertThat(streamGuard.flags()).contains(
+                OutputSecurityGuard.FLAG_REF_LEAK,
+                OutputSecurityGuard.FLAG_SECRET_REDACTED
+        );
+        assertThat(tail).isNotNull();
+
+        StreamingBlockOutputGuard leakGuard = new StreamingBlockOutputGuard();
+        leakGuard.feed("Tentando vazar REGRAS INTERNAS ");
+        leakGuard.feed("IMUTAVEIS DO CREATINGJ no meio do stream.\n\nOutro paragrafo.");
+        leakGuard.finish();
+        assertThat(leakGuard.replacedByRefusal()).isTrue();
+        assertThat(leakGuard.releasedContent()).isEqualTo(PromptSecurityGuard.STANDARD_REFUSAL_MESSAGE);
+        assertThat(leakGuard.feed("mais texto")).isEmpty();
+
+        StreamingBlockOutputGuard emptyGuard = new StreamingBlockOutputGuard();
+        assertThat(emptyGuard.finish()).containsExactly("(sem resposta textual)");
+
+        StreamingBlockOutputGuard sentenceGuard = new StreamingBlockOutputGuard();
+        assertThat(sentenceGuard.feed("[T1] " + "a".repeat(70) + ". Proxima frase.")).isNotEmpty();
+        assertThat(sentenceGuard.finish()).isNotEmpty();
+
+        StreamingBlockOutputGuard lineGuard = new StreamingBlockOutputGuard();
+        assertThat(lineGuard.feed("[T1] " + "b".repeat(225) + "\nLinha final")).isNotEmpty();
+        assertThat(lineGuard.finish()).isNotEmpty();
+
+        assertThat(PromptSecurityGuard.inspectInput(
+                "Token normal 8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4").blocked()).isFalse();
+        assertThat(StandaloneQueryBuilder.buildStandaloneQuery("sim", List.of("Como funciona o login PKCE?")))
+                .contains("Como funciona o login PKCE?");
+
+        String expanded = StandaloneQueryBuilder.buildStandaloneQuery(
+                "e no perfil prod?",
+                List.of("Como funciona a configuracao de cookies e Swagger no backend?")
+        );
+        assertThat(expanded).contains("Como funciona a configuracao de cookies").contains("e no perfil prod?");
+        String selfContained = StandaloneQueryBuilder.buildStandaloneQuery(
+                "Explique detalhadamente como configurar o indice HNSW parcial no PostgreSQL 18 com pgvector.",
+                List.of("Pergunta antiga")
+        );
+        assertThat(selfContained).doesNotContain("Pergunta antiga");
+        assertThat(StandaloneQueryBuilder.buildStandaloneQuery(" ", List.of("a"))).isEmpty();
+
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("login pkce", "cookie csrf", false)).hasSize(3);
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("pgvector rag", "onnx 768", false)).hasSize(3);
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("agente runner", "tool approval", false)).hasSize(3);
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("junit jacoco", "archunit maven", false)).hasSize(3);
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("arquitetura limpa", "codigo java", false)).hasSize(3);
+        assertThat(FollowUpSuggestionEngine.suggestFollowUps("qualquer", "recusa", true)).isEmpty();
     }
 }

@@ -6,6 +6,7 @@ import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
 import io.github.jvpgjava.creatingj.common.application.port.out.ClockPort;
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
+import io.github.jvpgjava.creatingj.common.domain.FollowUpSuggestionEngine;
 import io.github.jvpgjava.creatingj.common.domain.OutputSecurityGuard;
 import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.conversation.application.port.in.SendMessageUseCase;
@@ -124,7 +125,13 @@ public final class SendMessageInteractor implements SendMessageUseCase {
                 Generation completed = generationStore.save(
                         generation.complete(assistantMessage.id(), new TokenUsage(0, 0, 0), blockedAt));
                 conversationStore.save(conversation.touch(blockedAt));
-                return new MessageExchangeResult(userMessage, assistantMessage, completed);
+                return new MessageExchangeResult(
+                        userMessage,
+                        assistantMessage,
+                        completed,
+                        List.of(),
+                        List.of("input_blocked:" + inputVerdict.category().name())
+                );
             }
 
             List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
@@ -172,7 +179,18 @@ public final class SendMessageInteractor implements SendMessageUseCase {
             Generation completed = generationStore.save(
                     generation.complete(assistantMessage.id(), completion.usage(), finishedAt));
             conversationStore.save(conversation.touch(finishedAt));
-            return new MessageExchangeResult(userMessage, assistantMessage, completed);
+            List<String> followUps = FollowUpSuggestionEngine.suggestFollowUps(
+                    command.content(),
+                    assistantContent,
+                    sanitized.replaced()
+            );
+            return new MessageExchangeResult(
+                    userMessage,
+                    assistantMessage,
+                    completed,
+                    followUps,
+                    sanitized.flags()
+            );
         } catch (ModelProviderException ex) {
             Instant failedAt = clock.now();
             ErrorCode code = ex.toErrorCode();

@@ -139,9 +139,11 @@ class LiveOnnxRagAndStacE2EIT {
         JsonNode msgJson = objectMapper.readTree(msgResp);
         String assistantText = msgJson.path("assistantMessage").path("content").asString();
         assertThat(assistantText).isNotBlank();
-        LOG.info("LIVE_E2E_CHAT model={} totalTokens={} reply={}",
+        assertThat(msgJson.path("followUpSuggestions").size()).isEqualTo(3);
+        LOG.info("LIVE_E2E_CHAT model={} totalTokens={} followUps={} reply={}",
                 msgJson.path("generation").path("modelId").asString(),
                 msgJson.path("generation").path("totalTokens").asInt(),
+                msgJson.path("followUpSuggestions").size(),
                 assistantText);
 
         String agentResp = mockMvc.perform(post("/api/v1/projects/" + projectId + "/agent/runs")

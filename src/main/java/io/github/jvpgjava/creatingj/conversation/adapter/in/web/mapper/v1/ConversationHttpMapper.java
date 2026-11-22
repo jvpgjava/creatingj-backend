@@ -99,7 +99,9 @@ public final class ConversationHttpMapper {
         return new MessageExchangeResponse(
                 toMessage(result.userMessage()),
                 toMessage(result.assistantMessage()),
-                toGeneration(result.generation())
+                toGeneration(result.generation()),
+                result.followUpSuggestions(),
+                result.guardrailFlags()
         );
     }
 

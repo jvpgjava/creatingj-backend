@@ -45,15 +45,17 @@ public final class SearchProjectKnowledgeInteractor implements SearchProjectKnow
                 || query.queryText().trim().length() > MAX_QUERY_LENGTH) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "Texto de busca RAG invalido.");
         }
+        String normalizedQuery = query.queryText().trim();
         int topK = query.topK() <= 0 ? DEFAULT_TOP_K : Math.min(query.topK(), MAX_TOP_K);
         double minScore = Math.max(-1.0, Math.min(1.0, query.minScore()));
 
         long startedNanos = System.nanoTime();
         String embeddingVersion = embeddingPort.embeddingVersion();
-        EmbeddingVector queryVector = embeddingPort.embedQuery(query.queryText().trim());
-        List<KnowledgeSearchMatch> matches = vectorStore.searchSimilar(
+        EmbeddingVector queryVector = embeddingPort.embedQuery(normalizedQuery);
+        List<KnowledgeSearchMatch> matches = vectorStore.searchHybrid(
                 query.projectId(),
                 query.actorUserId(),
+                normalizedQuery,
                 queryVector,
                 embeddingVersion,
                 topK,

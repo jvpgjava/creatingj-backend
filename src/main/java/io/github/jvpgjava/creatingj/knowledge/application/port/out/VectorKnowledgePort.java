@@ -22,6 +22,18 @@ public interface VectorKnowledgePort {
             double minScore
     );
 
+    default List<KnowledgeSearchMatch> searchHybrid(
+            ProjectId projectId,
+            UserId ownerUserId,
+            String queryText,
+            EmbeddingVector queryVector,
+            String embeddingVersion,
+            int topK,
+            double minScore
+    ) {
+        return searchSimilar(projectId, ownerUserId, queryVector, embeddingVersion, topK, minScore);
+    }
+
     void deleteBySource(KnowledgeSourceId sourceId);
 
     void deleteByProject(ProjectId projectId, UserId ownerUserId);

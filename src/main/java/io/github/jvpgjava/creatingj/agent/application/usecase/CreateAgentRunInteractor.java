@@ -273,6 +273,7 @@ public final class CreateAgentRunInteractor implements CreateAgentRunUseCase {
             userPrompt.append("\n\n").append(workspaceBlock);
         }
         String ragBlock = RagContextFormatter.formatUntrustedContext(
+                goal,
                 ragMatches,
                 RagContextFormatter.DEFAULT_MAX_CONTEXT_CHARS
         );

@@ -1,5 +1,6 @@
 package io.github.jvpgjava.creatingj.conversation.application.usecase;
 
+import io.github.jvpgjava.creatingj.common.domain.StandaloneQueryBuilder;
 import io.github.jvpgjava.creatingj.conversation.domain.ChatMessage;
 import io.github.jvpgjava.creatingj.conversation.domain.MessageRole;
 import io.github.jvpgjava.creatingj.inference.domain.ChatRole;
@@ -56,11 +57,27 @@ final class PromptWindowAssembler {
             totalChars += msg.content().length();
         }
 
+        List<String> priorUserTexts = new ArrayList<>();
+        for (int i = window.size() - 1; i >= 1; i--) {
+            ChatMessage msg = window.get(i);
+            if (msg.role() == MessageRole.USER) {
+                priorUserTexts.add(msg.content());
+            }
+        }
+
         List<PromptMessage> result = new ArrayList<>(window.size() + 1);
         result.add(new PromptMessage(ChatRole.SYSTEM, SYSTEM_PROMPT));
         for (int i = window.size() - 1; i >= 0; i--) {
             ChatMessage msg = window.get(i);
-            result.add(new PromptMessage(toChatRole(msg.role()), msg.content()));
+            String content = msg.content();
+            if (i == 0 && msg.role() == MessageRole.USER && !priorUserTexts.isEmpty()
+                    && StandaloneQueryBuilder.needsContextExpansion(content)) {
+                String standalone = StandaloneQueryBuilder.buildStandaloneQuery(content, priorUserTexts);
+                if (!standalone.equals(content)) {
+                    content = content + "\n[Contexto da pergunta anterior na conversa: " + standalone + "]";
+                }
+            }
+            result.add(new PromptMessage(toChatRole(msg.role()), content));
         }
         return result;
     }

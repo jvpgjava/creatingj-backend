@@ -8,6 +8,7 @@ import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
 import io.github.jvpgjava.creatingj.common.domain.OutputSecurityGuard;
 import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
+import io.github.jvpgjava.creatingj.common.domain.StreamingBlockOutputGuard;
 import io.github.jvpgjava.creatingj.conversation.application.port.in.StreamMessageGenerationUseCase;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ActiveGenerationRegistryPort;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ConversationStorePort;
@@ -153,36 +154,45 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
                     DEFAULT_TEMPERATURE
             );
 
+            StreamingBlockOutputGuard blockGuard = new StreamingBlockOutputGuard();
             ModelCompletionResult result = modelGateway.stream(
                     request,
                     chunk -> {
                         if (chunk.deltaText() != null && !chunk.deltaText().isEmpty()) {
                             partial.append(chunk.deltaText());
-                            sink.accept(GenerationStreamEvent.delta(
-                                    generationId, eventSeq.getAndIncrement(), chunk.deltaText()));
+                            for (String safeBlock : blockGuard.feed(chunk.deltaText())) {
+                                sink.accept(GenerationStreamEvent.delta(
+                                        generationId, eventSeq.getAndIncrement(), safeBlock));
+                            }
                         }
                     },
                     () -> activeRegistry.isCancelled(generationId)
             );
+            for (String remainingBlock : blockGuard.finish()) {
+                sink.accept(GenerationStreamEvent.delta(
+                        generationId, eventSeq.getAndIncrement(), remainingBlock));
+            }
 
             Instant finishedAt = clock.now();
-            String rawContent = result.content() == null || result.content().isBlank()
-                    ? partial.toString()
-                    : result.content();
-            OutputSecurityGuard.SanitizedOutput sanitized = OutputSecurityGuard.inspectAndSanitize(rawContent);
-            if (!sanitized.flags().isEmpty()) {
+            String finalContent = blockGuard.releasedContent();
+            if ("(sem resposta textual)".equals(finalContent)
+                    && result.content() != null && !result.content().isBlank()) {
+                OutputSecurityGuard.SanitizedOutput fallbackSanitized =
+                        OutputSecurityGuard.inspectAndSanitize(result.content());
+                finalContent = fallbackSanitized.content();
+            }
+            if (!blockGuard.flags().isEmpty()) {
                 auditPort.record(AuditEvent.of(
                         UUID.randomUUID(),
                         command.actorUserId().value(),
                         command.actorUserId().value(),
                         AuditAction.GUARDRAIL_TRIGGERED,
-                        sanitized.replaced() ? "REPLACED" : "REDACTED",
-                        "outputFlags=" + String.join(",", sanitized.flags())
+                        blockGuard.replacedByRefusal() ? "REPLACED" : "REDACTED",
+                        "outputFlags=" + String.join(",", blockGuard.flags())
                                 + " conversationId=" + conversation.id().value(),
                         finishedAt
                 ));
             }
-            String finalContent = sanitized.content();
 
             reportedUsage = result.usage();
             outcome = UsageOutcome.COMPLETED;

@@ -3281,8 +3281,8 @@ components:
           example: 2026-11-22T18:05:12Z
     MessageExchangeResponse:
       type: object
-      description: Resultado sincrono do envio de mensagem com a resposta do assistente
-        e a geracao
+      description: "Resultado sincrono do envio de mensagem com resposta, geracao,\
+        \ follow-ups e trace de guardrails"
       properties:
         userMessage:
           $ref: "#/components/schemas/MessageResponse"
@@ -3293,6 +3293,21 @@ components:
         generation:
           $ref: "#/components/schemas/GenerationSummaryResponse"
           description: Metadados e contagem de tokens da geracao
+        followUpSuggestions:
+          type: array
+          description: Ate 3 sugestoes de perguntas de continuacao dentro do escopo
+            tecnico
+          example:
+          - Como testar esse fluxo de autenticacao com MockMvc?
+          items:
+            type: string
+        guardrailFlags:
+          type: array
+          description: Flags de auditoria acionadas pelos guardrails de entrada ou
+            saida (vazio quando limpo)
+          example: []
+          items:
+            type: string
     MessageResponse:
       type: object
       description: Mensagem persistida no historico da conversa
