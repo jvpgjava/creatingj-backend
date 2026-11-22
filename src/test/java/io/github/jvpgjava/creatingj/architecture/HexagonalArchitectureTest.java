@@ -87,8 +87,8 @@ class HexagonalArchitectureTest {
             );
 
     @ArchTest
-    static final ArchRule agentModuleMustNeverExecuteLocalCommandsOrReadServerFilesystem = noClasses()
-            .that().resideInAPackage("..agent..")
+    static final ArchRule agentDeviceTaskModulesMustNeverExecuteLocalCommandsOrReadServerFilesystem = noClasses()
+            .that().resideInAnyPackage("..agent..", "..device..", "..task..")
             .should().dependOnClassesThat().haveNameMatching(
                     "java\\.lang\\.ProcessBuilder|java\\.lang\\.Runtime|java\\.nio\\.file\\.Files"
             );

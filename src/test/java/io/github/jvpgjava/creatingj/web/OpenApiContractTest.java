@@ -84,8 +84,23 @@ class OpenApiContractTest {
         assertThat(generated.path("paths")
                 .has("/api/v1/projects/{projectId}/agent/runs/{runId}/proposals/{proposalId}/decision")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/agent/runs/{runId}/cancel")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/devices/pairing-challenges")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/devices")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/devices/{deviceId}/revoke")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/pair/complete")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/heartbeat")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/tasks")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/tasks/{taskId}")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/tasks/{taskId}/cancel")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/tasks/{taskId}/approvals/{approvalId}/decision")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/tasks/{taskId}/events/stream")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/tasks/lease")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/events")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/approvals")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/complete")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("bearerAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("cookieAuth")).isTrue();
+        assertThat(generated.path("components").path("securitySchemes").has("deviceTokenAuth")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/register")).isFalse();
     }
 

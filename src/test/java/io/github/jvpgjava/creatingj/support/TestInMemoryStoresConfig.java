@@ -15,6 +15,13 @@ import io.github.jvpgjava.creatingj.conversation.domain.ChatMessage;
 import io.github.jvpgjava.creatingj.conversation.domain.Conversation;
 import io.github.jvpgjava.creatingj.conversation.domain.ConversationId;
 import io.github.jvpgjava.creatingj.conversation.domain.Generation;
+import io.github.jvpgjava.creatingj.device.application.port.out.DeviceCredentialStorePort;
+import io.github.jvpgjava.creatingj.device.application.port.out.DeviceStorePort;
+import io.github.jvpgjava.creatingj.device.application.port.out.PairingChallengeStorePort;
+import io.github.jvpgjava.creatingj.device.domain.Device;
+import io.github.jvpgjava.creatingj.device.domain.DeviceCredential;
+import io.github.jvpgjava.creatingj.device.domain.DeviceId;
+import io.github.jvpgjava.creatingj.device.domain.PairingChallenge;
 import io.github.jvpgjava.creatingj.identity.application.port.in.ListUsersUseCase.UserSortField;
 import io.github.jvpgjava.creatingj.identity.application.port.out.AuthorizationCodeStorePort;
 import io.github.jvpgjava.creatingj.identity.application.port.out.InvitationStorePort;
@@ -44,6 +51,14 @@ import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceId;
 import io.github.jvpgjava.creatingj.project.application.port.out.ProjectStorePort;
 import io.github.jvpgjava.creatingj.project.domain.Project;
 import io.github.jvpgjava.creatingj.project.domain.ProjectId;
+import io.github.jvpgjava.creatingj.task.application.port.out.RemoteTaskStorePort;
+import io.github.jvpgjava.creatingj.task.application.port.out.TaskEventStorePort;
+import io.github.jvpgjava.creatingj.task.application.port.out.ToolApprovalStorePort;
+import io.github.jvpgjava.creatingj.task.domain.RemoteTask;
+import io.github.jvpgjava.creatingj.task.domain.TaskEvent;
+import io.github.jvpgjava.creatingj.task.domain.TaskId;
+import io.github.jvpgjava.creatingj.task.domain.ToolApproval;
+import io.github.jvpgjava.creatingj.task.domain.ToolApprovalId;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
@@ -587,6 +602,164 @@ public class TestInMemoryStoresConfig {
                         .filter(p -> p.runId().equals(runId))
                         .sorted(Comparator.comparingInt(AgentToolProposal::stepIndex))
                         .toList();
+            }
+        };
+    }
+
+    @Bean
+    public DeviceStorePort testDeviceStorePort() {
+        return new DeviceStorePort() {
+            private final Map<DeviceId, Device> store = new ConcurrentHashMap<>();
+
+            @Override
+            public Device save(Device device) {
+                store.put(device.id(), device);
+                return device;
+            }
+
+            @Override
+            public Optional<Device> findById(DeviceId deviceId) {
+                return Optional.ofNullable(store.get(deviceId));
+            }
+
+            @Override
+            public List<Device> findByOwner(UserId ownerUserId) {
+                return store.values().stream().filter(d -> d.isOwnedBy(ownerUserId)).toList();
+            }
+        };
+    }
+
+    @Bean
+    public PairingChallengeStorePort testPairingChallengeStorePort() {
+        return new PairingChallengeStorePort() {
+            private final Map<String, PairingChallenge> store = new ConcurrentHashMap<>();
+
+            @Override
+            public PairingChallenge save(PairingChallenge challenge) {
+                store.put(challenge.codeHash(), challenge);
+                return challenge;
+            }
+
+            @Override
+            public Optional<PairingChallenge> findByCodeHash(String codeHash) {
+                return Optional.ofNullable(store.get(codeHash));
+            }
+        };
+    }
+
+    @Bean
+    public DeviceCredentialStorePort testDeviceCredentialStorePort() {
+        return new DeviceCredentialStorePort() {
+            private final Map<String, DeviceCredential> store = new ConcurrentHashMap<>();
+
+            @Override
+            public DeviceCredential save(DeviceCredential credential) {
+                store.put(credential.tokenHash(), credential);
+                return credential;
+            }
+
+            @Override
+            public Optional<DeviceCredential> findByTokenHash(String tokenHash) {
+                return Optional.ofNullable(store.get(tokenHash));
+            }
+
+            @Override
+            public void revokeAllByDeviceId(DeviceId deviceId, Instant revokedAt) {
+                store.replaceAll((k, v) -> v.deviceId().equals(deviceId) ? v.revoke(revokedAt) : v);
+            }
+        };
+    }
+
+    @Bean
+    public RemoteTaskStorePort testRemoteTaskStorePort() {
+        return new RemoteTaskStorePort() {
+            private final Map<TaskId, RemoteTask> store = new ConcurrentHashMap<>();
+
+            @Override
+            public RemoteTask save(RemoteTask task) {
+                store.put(task.id(), task);
+                return task;
+            }
+
+            @Override
+            public Optional<RemoteTask> findById(TaskId taskId) {
+                return Optional.ofNullable(store.get(taskId));
+            }
+
+            @Override
+            public Optional<RemoteTask> findByIdempotency(
+                    UserId ownerUserId,
+                    DeviceId deviceId,
+                    String idempotencyKey
+            ) {
+                return store.values().stream()
+                        .filter(t -> t.isOwnedBy(ownerUserId)
+                                && t.isAssignedTo(deviceId)
+                                && idempotencyKey.equals(t.idempotencyKey()))
+                        .findFirst();
+            }
+
+            @Override
+            public List<RemoteTask> findRecentByOwner(UserId ownerUserId, int limit) {
+                return store.values().stream().filter(t -> t.isOwnedBy(ownerUserId)).limit(limit).toList();
+            }
+
+            @Override
+            public Optional<RemoteTask> findNextLeasableForDevice(DeviceId deviceId, Instant now) {
+                return store.values().stream()
+                        .filter(t -> t.isAssignedTo(deviceId) && t.isLeasableAt(now))
+                        .sorted(Comparator.comparing(RemoteTask::createdAt))
+                        .findFirst();
+            }
+        };
+    }
+
+    @Bean
+    public TaskEventStorePort testTaskEventStorePort() {
+        return new TaskEventStorePort() {
+            private final List<TaskEvent> events = new CopyOnWriteArrayList<>();
+
+            @Override
+            public Optional<TaskEvent> findByTaskAndEventKey(TaskId taskId, String eventKey) {
+                return events.stream()
+                        .filter(e -> e.taskId().equals(taskId) && e.eventKey().equals(eventKey))
+                        .findFirst();
+            }
+
+            @Override
+            public TaskEvent save(TaskEvent event) {
+                if (findByTaskAndEventKey(event.taskId(), event.eventKey()).isEmpty()) {
+                    events.add(event);
+                }
+                return event;
+            }
+
+            @Override
+            public List<TaskEvent> findByTaskOrderByCreatedAsc(TaskId taskId) {
+                return events.stream().filter(e -> e.taskId().equals(taskId)).toList();
+            }
+        };
+    }
+
+    @Bean
+    public ToolApprovalStorePort testToolApprovalStorePort() {
+        return new ToolApprovalStorePort() {
+            private final Map<ToolApprovalId, ToolApproval> store = new ConcurrentHashMap<>();
+
+            @Override
+            public ToolApproval save(ToolApproval approval) {
+                store.put(approval.id(), approval);
+                return approval;
+            }
+
+            @Override
+            public Optional<ToolApproval> findById(ToolApprovalId approvalId) {
+                return Optional.ofNullable(store.get(approvalId));
+            }
+
+            @Override
+            public List<ToolApproval> findByTaskOrderByCreatedAsc(TaskId taskId) {
+                return store.values().stream().filter(a -> a.taskId().equals(taskId)).toList();
             }
         };
     }

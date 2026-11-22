@@ -2,6 +2,7 @@ package io.github.jvpgjava.creatingj.bootstrap.config.security;
 
 import io.github.jvpgjava.creatingj.bootstrap.config.web.ProblemDetailsFactory;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
+import io.github.jvpgjava.creatingj.device.adapter.in.web.security.DeviceAuthenticationFilter;
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.security.SessionAuthenticationFilter;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,6 +37,7 @@ public class SecurityConfig {
     private final ObjectMapper objectMapper;
     private final AuthRateLimitFilter authRateLimitFilter;
     private final SessionAuthenticationFilter sessionAuthenticationFilter;
+    private final DeviceAuthenticationFilter deviceAuthenticationFilter;
     private final CsrfCookieProtectionFilter csrfCookieProtectionFilter;
     private final ConversationRateLimitFilter conversationRateLimitFilter;
     private final CorsProperties corsProperties;
@@ -46,6 +48,7 @@ public class SecurityConfig {
             ObjectMapper objectMapper,
             AuthRateLimitFilter authRateLimitFilter,
             SessionAuthenticationFilter sessionAuthenticationFilter,
+            DeviceAuthenticationFilter deviceAuthenticationFilter,
             CsrfCookieProtectionFilter csrfCookieProtectionFilter,
             ConversationRateLimitFilter conversationRateLimitFilter,
             CorsProperties corsProperties,
@@ -55,6 +58,7 @@ public class SecurityConfig {
         this.objectMapper = objectMapper;
         this.authRateLimitFilter = authRateLimitFilter;
         this.sessionAuthenticationFilter = sessionAuthenticationFilter;
+        this.deviceAuthenticationFilter = deviceAuthenticationFilter;
         this.csrfCookieProtectionFilter = csrfCookieProtectionFilter;
         this.conversationRateLimitFilter = conversationRateLimitFilter;
         this.corsProperties = corsProperties;
@@ -72,7 +76,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(sessionAuthenticationFilter, AuthRateLimitFilter.class)
-                .addFilterAfter(csrfCookieProtectionFilter, SessionAuthenticationFilter.class)
+                .addFilterAfter(deviceAuthenticationFilter, SessionAuthenticationFilter.class)
+                .addFilterAfter(csrfCookieProtectionFilter, DeviceAuthenticationFilter.class)
                 .addFilterAfter(conversationRateLimitFilter, CsrfCookieProtectionFilter.class)
                 .headers(headers -> headers
                         .contentTypeOptions(contentType -> { })
@@ -102,8 +107,10 @@ public class SecurityConfig {
                             "/api/v1/auth/pkce/token",
                             "/api/v1/auth/token/refresh",
                             "/api/v1/auth/password-reset/request",
-                            "/api/v1/auth/password-reset/confirm"
+                            "/api/v1/auth/password-reset/confirm",
+                            "/api/v1/runner/pair/complete"
                     ).permitAll();
+                    auth.requestMatchers("/api/v1/runner/**").hasRole("RUNNER");
                     auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
                     auth.requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN");
                     if (publicDocsEnabled) {

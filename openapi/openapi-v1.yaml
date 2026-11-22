@@ -15,17 +15,23 @@ tags:
   description: "Sessao web por cookie/CSRF, PKCE S256 para apps publicos e sessoes"
 - name: Conversations
   description: "Conversas, historico, chat sincrono, streaming SSE e cancelamento"
-- name: Admin Usage
-  description: Visao administrativa de consumo e configuracao de quotas (restrito
-    a ADMIN)
 - name: Agent Orchestration
   description: "Planejamento de agente, contexto de workspace e guardrails de tools"
 - name: System
   description: Diagnostico basico e metadados publicos da API v1
+- name: Runner Protocol
+  description: Endpoints exclusivos do runner local (creatingj-agent)
 - name: Knowledge RAG
   description: "Ingestao, indexacao vetorial pgvector e busca RAG isolada por projeto"
 - name: Projects
   description: Gestao de projetos isolados por proprietario
+- name: Devices
+  description: "Pareamento, presenca e revogacao de dispositivos autorizados"
+- name: Remote Tasks
+  description: "Fila de tarefas remotas, cancelamento, aprovacoes pontuais e SSE"
+- name: Admin Usage
+  description: Visao administrativa de consumo e configuracao de quotas (restrito
+    a ADMIN)
 - name: Admin Users
   description: Gestao administrativa de contas CreatingJ (restrito a ADMIN)
 paths:
@@ -75,6 +81,356 @@ paths:
       security:
       - bearerAuth: []
       - cookieAuth: []
+  /api/v1/tasks:
+    get:
+      tags:
+      - Remote Tasks
+      summary: Listar tarefas remotas recentes do usuario
+      operationId: listRemoteTasks
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: Lista de tarefas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteTasksResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+    post:
+      tags:
+      - Remote Tasks
+      summary: Enfileirar tarefa remota para dispositivo autorizado
+      operationId: createRemoteTask
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRemoteTaskRequest"
+        required: true
+      responses:
+        "201":
+          description: Tarefa criada ou deduplicada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateRemoteTaskResponse"
+        "400":
+          description: Entrada invalida
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Dispositivo ou projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: Dispositivo revogado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/tasks/{taskId}/cancel:
+    post:
+      tags:
+      - Remote Tasks
+      summary: Cancelar tarefa remota e rejeitar aprovacoes pendentes
+      operationId: cancelRemoteTask
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Tarefa cancelada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/tasks/{taskId}/approvals/{approvalId}/decision:
+    post:
+      tags:
+      - Remote Tasks
+      summary: Aprovar ou rejeitar solicitacao pontual do runner
+      operationId: decideRemoteToolApproval
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: approvalId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolApprovalDecisionRequest"
+        required: true
+      responses:
+        "200":
+          description: Decisao registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolApprovalDecisionResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa ou aprovacao nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: Aprovacao expirada ou ja decidida
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/runner/tasks/{taskId}/events:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Reportar evento de progresso com deduplicacao
+      operationId: reportRunnerTaskEvent
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunnerTaskEventRequest"
+        required: true
+      responses:
+        "200":
+          description: Evento registrado ou deduplicado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerTaskEventResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada para este dispositivo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - deviceTokenAuth: []
+  /api/v1/runner/tasks/{taskId}/complete:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Concluir ou falhar tarefa atribuida ao dispositivo
+      operationId: completeRunnerTask
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunnerCompleteTaskRequest"
+        required: true
+      responses:
+        "200":
+          description: Tarefa finalizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada para este dispositivo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - deviceTokenAuth: []
+  /api/v1/runner/tasks/{taskId}/approvals:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Solicitar aprovacao pontual com TTL para tool
+      operationId: requestRunnerToolApproval
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunnerApprovalRequest"
+        required: true
+      responses:
+        "201":
+          description: Aprovacao criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolApprovalResponse"
+        "400":
+          description: Ferramenta ou comando bloqueado por politica
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada para este dispositivo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - deviceTokenAuth: []
+  /api/v1/runner/tasks/lease:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Adquirir lease da proxima tarefa destinada ao runner
+      operationId: leaseNextRunnerTask
+      responses:
+        "200":
+          description: Resultado do lease
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerLeaseResponse"
+        "401":
+          description: Credencial de dispositivo invalida
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - deviceTokenAuth: []
+  /api/v1/runner/pair/complete:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Trocar codigo de pareamento de uso unico por credencial de dispositivo
+      operationId: completeDevicePairing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletePairingRequest"
+        required: true
+      responses:
+        "200":
+          description: Dispositivo pareado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompletePairingResponse"
+        "401":
+          description: Codigo invalido ou expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /api/v1/runner/heartbeat:
+    post:
+      tags:
+      - Runner Protocol
+      summary: Registrar heartbeat de presenca do dispositivo autenticado
+      operationId: recordDeviceHeartbeat
+      responses:
+        "200":
+          description: Heartbeat registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceSummaryResponse"
+        "401":
+          description: Credencial de dispositivo invalida ou revogada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - deviceTokenAuth: []
   /api/v1/projects:
     get:
       tags:
@@ -458,6 +814,74 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: Execucao nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/devices/{deviceId}/revoke:
+    post:
+      tags:
+      - Devices
+      summary: Revogar dispositivo e invalidar suas credenciais
+      operationId: revokeDevice
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Dispositivo revogado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceSummaryResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Dispositivo nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/devices/pairing-challenges:
+    post:
+      tags:
+      - Devices
+      summary: Gerar codigo de pareamento de uso unico
+      operationId: createPairingChallenge
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePairingChallengeRequest"
+        required: true
+      responses:
+        "201":
+          description: Codigo gerado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingChallengeResponse"
+        "400":
+          description: Entrada invalida
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Nao autenticado
           content:
             application/problem+json:
               schema:
@@ -1105,6 +1529,72 @@ paths:
       security:
       - bearerAuth: []
       - cookieAuth: []
+  /api/v1/tasks/{taskId}:
+    get:
+      tags:
+      - Remote Tasks
+      summary: "Obter detalhes, eventos e aprovacoes de uma tarefa"
+      operationId: getRemoteTask
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Detalhes da tarefa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteTaskDetailResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/tasks/{taskId}/events/stream:
+    get:
+      tags:
+      - Remote Tasks
+      summary: Acompanhar progresso de uma tarefa remota via SSE
+      operationId: streamRemoteTaskEvents
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Stream SSE de eventos da tarefa
+          content:
+            text/event-stream: {}
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Tarefa nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/system/status:
     get:
       tags:
@@ -1261,6 +1751,28 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: Execucao ou projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/devices:
+    get:
+      tags:
+      - Devices
+      summary: Listar dispositivos pareados e status online do usuario
+      operationId: listDevices
+      responses:
+        "200":
+          description: Lista de dispositivos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevicesResponse"
+        "401":
+          description: Nao autenticado
           content:
             application/problem+json:
               schema:
@@ -1499,6 +2011,232 @@ components:
         properties:
           type: object
           additionalProperties: {}
+    CreateRemoteTaskRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          minLength: 1
+        projectId:
+          type: string
+        idempotencyKey:
+          type: string
+          maxLength: 120
+          minLength: 0
+        title:
+          type: string
+          maxLength: 160
+          minLength: 0
+        instruction:
+          type: string
+          maxLength: 4000
+          minLength: 0
+      required:
+      - deviceId
+      - instruction
+      - title
+    CreateRemoteTaskResponse:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+        deviceOnline:
+          type: boolean
+        deduplicated:
+          type: boolean
+    RemoteTaskSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        deviceId:
+          type: string
+        title:
+          type: string
+        instruction:
+          type: string
+        status:
+          type: string
+        leaseExpiresAt:
+          type: string
+          format: date-time
+        resultSummary:
+          type: string
+        errorCode:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    ToolApprovalDecisionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+      required:
+      - action
+    ToolApprovalDecisionResponse:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+        approval:
+          $ref: "#/components/schemas/ToolApprovalResponse"
+    ToolApprovalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        taskId:
+          type: string
+        toolName:
+          type: string
+        targetPath:
+          type: string
+        commandText:
+          type: string
+        diffPreview:
+          type: string
+        status:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    RunnerTaskEventRequest:
+      type: object
+      properties:
+        eventKey:
+          type: string
+          maxLength: 120
+          minLength: 0
+        message:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - eventKey
+      - message
+    RunnerTaskEventResponse:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/TaskEventResponse"
+        deduplicated:
+          type: boolean
+    TaskEventResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        eventKey:
+          type: string
+        eventType:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    RunnerCompleteTaskRequest:
+      type: object
+      properties:
+        succeeded:
+          type: boolean
+        resultSummary:
+          type: string
+          maxLength: 4000
+          minLength: 0
+        errorCode:
+          type: string
+          maxLength: 64
+          minLength: 0
+    RunnerApprovalRequest:
+      type: object
+      properties:
+        toolName:
+          type: string
+          maxLength: 40
+          minLength: 0
+        targetPath:
+          type: string
+          maxLength: 260
+          minLength: 0
+        commandText:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        diffPreview:
+          type: string
+          maxLength: 8000
+          minLength: 0
+        ttlSeconds:
+          type: integer
+          format: int32
+          maximum: 600
+          minimum: 30
+      required:
+      - toolName
+    RunnerLeaseResponse:
+      type: object
+      properties:
+        assigned:
+          type: boolean
+        task:
+          $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+    CompletePairingRequest:
+      type: object
+      properties:
+        pairingCode:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - pairingCode
+    CompletePairingResponse:
+      type: object
+      properties:
+        device:
+          $ref: "#/components/schemas/DeviceSummaryResponse"
+        deviceToken:
+          type: string
+    DeviceSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        platform:
+          type: string
+        status:
+          type: string
+        online:
+          type: boolean
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
     CreateProjectRequest:
       type: object
       properties:
@@ -1785,6 +2523,36 @@ components:
           $ref: "#/components/schemas/AgentRunSummaryResponse"
         proposal:
           $ref: "#/components/schemas/AgentToolProposalResponse"
+    CreatePairingChallengeRequest:
+      type: object
+      properties:
+        deviceName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        platform:
+          type: string
+          enum:
+          - LINUX
+          - WINDOWS
+          - MACOS
+      required:
+      - deviceName
+      - platform
+    PairingChallengeResponse:
+      type: object
+      properties:
+        challengeId:
+          type: string
+        pairingCode:
+          type: string
+        deviceName:
+          type: string
+        platform:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
     CreateConversationRequest:
       type: object
       properties:
@@ -2176,6 +2944,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UsageRecordResponse"
+    RemoteTasksResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+    RemoteTaskDetailResponse:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskEventResponse"
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolApprovalResponse"
     SystemStatusResponse:
       type: object
       properties:
@@ -2225,6 +3013,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentRunSummaryResponse"
+    DevicesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceSummaryResponse"
     ConversationsPageResponse:
       type: object
       properties:
@@ -2333,3 +3128,8 @@ components:
       description: Cookie HttpOnly emitido em /api/v1/auth/web/login
       name: CREATINGJ_SESSION
       in: cookie
+    deviceTokenAuth:
+      type: apiKey
+      description: Credencial exclusiva do dispositivo pareado (ROLE_RUNNER)
+      name: X-Device-Token
+      in: header
