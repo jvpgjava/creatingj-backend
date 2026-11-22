@@ -79,6 +79,11 @@ class OpenApiContractTest {
         assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/knowledge/sources/{sourceId}")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/knowledge/search")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/knowledge/jobs")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/agent/runs")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/agent/runs/{runId}")).isTrue();
+        assertThat(generated.path("paths")
+                .has("/api/v1/projects/{projectId}/agent/runs/{runId}/proposals/{proposalId}/decision")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/projects/{projectId}/agent/runs/{runId}/cancel")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("bearerAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("cookieAuth")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/register")).isFalse();

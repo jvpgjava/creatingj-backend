@@ -85,4 +85,11 @@ class HexagonalArchitectureTest {
                     "..adapter.in.web.apidocs.v1..",
                     "..adapter.in.web.apidocs.v2.."
             );
+
+    @ArchTest
+    static final ArchRule agentModuleMustNeverExecuteLocalCommandsOrReadServerFilesystem = noClasses()
+            .that().resideInAPackage("..agent..")
+            .should().dependOnClassesThat().haveNameMatching(
+                    "java\\.lang\\.ProcessBuilder|java\\.lang\\.Runtime|java\\.nio\\.file\\.Files"
+            );
 }

@@ -1,5 +1,11 @@
 package io.github.jvpgjava.creatingj.support;
 
+import io.github.jvpgjava.creatingj.agent.application.port.out.AgentRunStorePort;
+import io.github.jvpgjava.creatingj.agent.application.port.out.AgentToolProposalStorePort;
+import io.github.jvpgjava.creatingj.agent.domain.AgentRun;
+import io.github.jvpgjava.creatingj.agent.domain.AgentRunId;
+import io.github.jvpgjava.creatingj.agent.domain.AgentToolProposal;
+import io.github.jvpgjava.creatingj.agent.domain.ToolProposalId;
 import io.github.jvpgjava.creatingj.audit.application.port.out.AuditPort;
 import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ConversationStorePort;
@@ -521,6 +527,65 @@ public class TestInMemoryStoresConfig {
                         .filter(j -> j.projectId().equals(projectId) && j.ownerUserId().equals(ownerUserId))
                         .sorted(Comparator.comparing(KnowledgeIndexJob::createdAt).reversed())
                         .limit(limit)
+                        .toList();
+            }
+        };
+    }
+
+    @Bean
+    public AgentRunStorePort testAgentRunStorePort() {
+        return new AgentRunStorePort() {
+            private final Map<AgentRunId, AgentRun> store = new ConcurrentHashMap<>();
+
+            @Override
+            public AgentRun save(AgentRun run) {
+                store.put(run.id(), run);
+                return run;
+            }
+
+            @Override
+            public Optional<AgentRun> findById(AgentRunId runId) {
+                return Optional.ofNullable(store.get(runId));
+            }
+
+            @Override
+            public List<AgentRun> findRecentByProjectAndOwner(ProjectId projectId, UserId ownerUserId, int limit) {
+                return store.values().stream()
+                        .filter(r -> r.belongsTo(projectId, ownerUserId))
+                        .sorted(Comparator.comparing(AgentRun::createdAt).reversed())
+                        .limit(limit)
+                        .toList();
+            }
+        };
+    }
+
+    @Bean
+    public AgentToolProposalStorePort testAgentToolProposalStorePort() {
+        return new AgentToolProposalStorePort() {
+            private final Map<ToolProposalId, AgentToolProposal> store = new ConcurrentHashMap<>();
+
+            @Override
+            public AgentToolProposal save(AgentToolProposal proposal) {
+                store.put(proposal.id(), proposal);
+                return proposal;
+            }
+
+            @Override
+            public List<AgentToolProposal> saveAll(List<AgentToolProposal> proposals) {
+                proposals.forEach(this::save);
+                return proposals;
+            }
+
+            @Override
+            public Optional<AgentToolProposal> findById(ToolProposalId proposalId) {
+                return Optional.ofNullable(store.get(proposalId));
+            }
+
+            @Override
+            public List<AgentToolProposal> findByRunOrderByStepAsc(AgentRunId runId) {
+                return store.values().stream()
+                        .filter(p -> p.runId().equals(runId))
+                        .sorted(Comparator.comparingInt(AgentToolProposal::stepIndex))
                         .toList();
             }
         };

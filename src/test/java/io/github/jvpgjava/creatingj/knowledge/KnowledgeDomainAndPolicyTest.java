@@ -159,4 +159,81 @@ class KnowledgeDomainAndPolicyTest {
                 "unknown", "https://api.trystac.com/v1", "", "", 384, 15, true);
         assertThatThrownBy(badProvider::validatePolicy).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void shouldValidateKnowledgeSourceChunkAndJobDomainInvariants() {
+        var now = java.time.Instant.parse("2026-11-22T15:30:00Z");
+        var sourceId = KnowledgeSourceId.random();
+        var projectId = io.github.jvpgjava.creatingj.project.domain.ProjectId.random();
+        var owner = io.github.jvpgjava.creatingj.identity.domain.UserId.newId();
+        var vector = new DeterministicHashedEmbeddingAdapter().embed("sample text");
+
+        var source = new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, "docs/a.md", "A", "hash", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now);
+        assertThat(source.isUnchanged("hash", "v1")).isTrue();
+        assertThat(source.isUnchanged("other", "v1")).isFalse();
+        assertThat(source.isUnchanged("hash", "v2")).isFalse();
+        assertThat(source.belongsTo(projectId, owner)).isTrue();
+        assertThat(source.belongsTo(io.github.jvpgjava.creatingj.project.domain.ProjectId.random(), owner)).isFalse();
+
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                null, projectId, owner, "docs/a.md", "A", "hash", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, " ", "A", "hash", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, "docs/a.md", " ", "hash", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, "docs/a.md", "A", " ", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, "docs/a.md", "A", "hash", " ",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, 1, now, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource(
+                sourceId, projectId, owner, "docs/a.md", "A", "hash", "v1",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceStatus.INDEXED, -1, now, now))
+                .isInstanceOf(DomainException.class);
+
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk(
+                null, sourceId, projectId, owner, 0, "c", "h", 1, "v1", vector, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk(
+                KnowledgeChunkId.random(), sourceId, projectId, owner, -1, "c", "h", 1, "v1", vector, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk(
+                KnowledgeChunkId.random(), sourceId, projectId, owner, 0, " ", "h", 1, "v1", vector, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk(
+                KnowledgeChunkId.random(), sourceId, projectId, owner, 0, "c", " ", 1, "v1", vector, now))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk(
+                KnowledgeChunkId.random(), sourceId, projectId, owner, 0, "c", "h", 1, " ", vector, now))
+                .isInstanceOf(DomainException.class);
+
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJob(
+                null, projectId, owner, sourceId, "docs/a.md",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobOperation.UPSERT,
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobStatus.RUNNING, 0, null, now, null))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJob(
+                KnowledgeIndexJobId.random(), projectId, owner, sourceId, " ",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobOperation.UPSERT,
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobStatus.RUNNING, 0, null, now, null))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> new io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJob(
+                KnowledgeIndexJobId.random(), projectId, owner, sourceId, "docs/a.md",
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobOperation.UPSERT,
+                io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeJobStatus.RUNNING, -1, null, now, null))
+                .isInstanceOf(DomainException.class);
+
+        assertThat(TextChunker.split("a".repeat(250), 100, 20)).hasSizeGreaterThan(2);
+    }
 }

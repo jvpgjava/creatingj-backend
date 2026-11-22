@@ -18,6 +18,8 @@ tags:
 - name: Admin Usage
   description: Visao administrativa de consumo e configuracao de quotas (restrito
     a ADMIN)
+- name: Agent Orchestration
+  description: "Planejamento de agente, contexto de workspace e guardrails de tools"
 - name: System
   description: Diagnostico basico e metadados publicos da API v1
 - name: Knowledge RAG
@@ -268,6 +270,194 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: Projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/projects/{projectId}/agent/runs:
+    get:
+      tags:
+      - Agent Orchestration
+      summary: Listar execucoes recentes de agente do projeto
+      operationId: listAgentRuns
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: Lista de execucoes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunsResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+    post:
+      tags:
+      - Agent Orchestration
+      summary: "Planejar acoes de agente com contexto do workspace, RAG e guardrails\
+        \ deterministicos"
+      operationId: createAgentRun
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentRunRequest"
+        required: true
+      responses:
+        "201":
+          description: Plano e propostas avaliadas criados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunDetailResponse"
+        "400":
+          description: Entrada ou snapshot de workspace invalido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "429":
+          description: Quota ou limite de concorrencia excedido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/projects/{projectId}/agent/runs/{runId}/proposals/{proposalId}/decision:
+    post:
+      tags:
+      - Agent Orchestration
+      summary: Aprovar ou rejeitar proposta pendente de ferramenta do agente
+      operationId: decideToolProposal
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: proposalId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolProposalDecisionRequest"
+        required: true
+      responses:
+        "200":
+          description: Decisao registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolProposalDecisionResponse"
+        "409":
+          description: Estado invalido ou proposta negada por politica
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Execucao ou proposta nao encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+  /api/v1/projects/{projectId}/agent/runs/{runId}/cancel:
+    post:
+      tags:
+      - Agent Orchestration
+      summary: Cancelar execucao do agente e rejeitar propostas pendentes
+      operationId: cancelAgentRun
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Execucao cancelada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunSummaryResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Execucao nao encontrada
           content:
             application/problem+json:
               schema:
@@ -1039,6 +1229,45 @@ paths:
       security:
       - bearerAuth: []
       - cookieAuth: []
+  /api/v1/projects/{projectId}/agent/runs/{runId}:
+    get:
+      tags:
+      - Agent Orchestration
+      summary: Consultar detalhes e propostas de uma execucao do agente
+      operationId: getAgentRun
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Detalhes da execucao
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunDetailResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: Execucao ou projeto nao encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/conversations/{conversationId}:
     get:
       tags:
@@ -1435,6 +1664,127 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KnowledgeSearchMatchResponse"
+    CreateAgentRunRequest:
+      type: object
+      properties:
+        goal:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        modelId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        workspaceFiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceFileSnapshotRequest"
+          maxItems: 10
+          minItems: 0
+        includeProjectRag:
+          type: boolean
+        ragTopK:
+          type: integer
+          format: int32
+          maximum: 10
+          minimum: 1
+      required:
+      - goal
+    WorkspaceFileSnapshotRequest:
+      type: object
+      properties:
+        relativePath:
+          type: string
+          maxLength: 260
+          minLength: 0
+        content:
+          type: string
+          maxLength: 12000
+          minLength: 0
+      required:
+      - content
+      - relativePath
+    AgentRunDetailResponse:
+      type: object
+      properties:
+        run:
+          $ref: "#/components/schemas/AgentRunSummaryResponse"
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentToolProposalResponse"
+    AgentRunSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        goal:
+          type: string
+        modelId:
+          type: string
+        planSummary:
+          type: string
+        status:
+          type: string
+        workspaceFileCount:
+          type: integer
+          format: int32
+        ragMatchCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AgentToolProposalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        stepIndex:
+          type: integer
+          format: int32
+        toolName:
+          type: string
+        targetPath:
+          type: string
+        commandText:
+          type: string
+        rationale:
+          type: string
+        policyDecision:
+          type: string
+        policyReason:
+          type: string
+        approvalStatus:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ToolProposalDecisionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+      required:
+      - action
+    ToolProposalDecisionResponse:
+      type: object
+      properties:
+        run:
+          $ref: "#/components/schemas/AgentRunSummaryResponse"
+        proposal:
+          $ref: "#/components/schemas/AgentToolProposalResponse"
     CreateConversationRequest:
       type: object
       properties:
@@ -1868,6 +2218,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KnowledgeIndexJobResponse"
+    AgentRunsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentRunSummaryResponse"
     ConversationsPageResponse:
       type: object
       properties:
