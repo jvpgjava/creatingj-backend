@@ -58,6 +58,15 @@ creatingj:
       embedding-model: ${CRJ_EMBEDDING_MODEL:}
       require-api-key: false
       strict-url-validation: true
+  knowledge:
+    embedding:
+      provider: ${CRJ_EMBEDDING_PROVIDER:local-hash}
+      base-url: ${CRJ_EMBEDDING_BASE_URL:${CRJ_API_BASE_URL:https://api.trystac.com/v1}}
+      api-key: ${CRJ_EMBEDDING_API_KEY:${CRJ_API_KEY:}}
+      model: ${CRJ_EMBEDDING_MODEL:}
+      dimensions: 384
+      timeout-seconds: 15
+      strict-url-validation: true
 
 logging:
   pattern:

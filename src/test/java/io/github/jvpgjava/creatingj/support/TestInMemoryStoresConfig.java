@@ -26,10 +26,23 @@ import io.github.jvpgjava.creatingj.inference.application.port.out.UsageRecordSt
 import io.github.jvpgjava.creatingj.inference.application.port.out.UserQuotaStorePort;
 import io.github.jvpgjava.creatingj.inference.domain.UsageRecord;
 import io.github.jvpgjava.creatingj.inference.domain.UserQuota;
+import io.github.jvpgjava.creatingj.knowledge.application.port.out.KnowledgeIndexJobStorePort;
+import io.github.jvpgjava.creatingj.knowledge.application.port.out.KnowledgeSourceStorePort;
+import io.github.jvpgjava.creatingj.knowledge.application.port.out.VectorKnowledgePort;
+import io.github.jvpgjava.creatingj.knowledge.domain.EmbeddingVector;
+import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk;
+import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJob;
+import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSearchMatch;
+import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource;
+import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceId;
+import io.github.jvpgjava.creatingj.project.application.port.out.ProjectStorePort;
+import io.github.jvpgjava.creatingj.project.domain.Project;
+import io.github.jvpgjava.creatingj.project.domain.ProjectId;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -338,6 +351,177 @@ public class TestInMemoryStoresConfig {
                 return records.stream()
                         .filter(r -> !r.recordedAt().isBefore(startInclusive) && r.recordedAt().isBefore(endExclusive))
                         .count();
+            }
+        };
+    }
+
+    @Bean
+    public ProjectStorePort testProjectStorePort() {
+        return new ProjectStorePort() {
+            private final Map<ProjectId, Project> store = new ConcurrentHashMap<>();
+
+            @Override
+            public Project save(Project project) {
+                store.put(project.id(), project);
+                return project;
+            }
+
+            @Override
+            public Optional<Project> findById(ProjectId projectId) {
+                return Optional.ofNullable(store.get(projectId));
+            }
+
+            @Override
+            public Optional<Project> findByOwnerAndSlug(UserId ownerUserId, String slug) {
+                return store.values().stream()
+                        .filter(p -> p.ownerUserId().equals(ownerUserId) && p.slug().equals(slug))
+                        .findFirst();
+            }
+
+            @Override
+            public List<Project> findByOwner(UserId ownerUserId, int offset, int limit) {
+                return store.values().stream()
+                        .filter(p -> p.ownerUserId().equals(ownerUserId))
+                        .skip(offset)
+                        .limit(limit)
+                        .toList();
+            }
+
+            @Override
+            public long countByOwner(UserId ownerUserId) {
+                return store.values().stream().filter(p -> p.ownerUserId().equals(ownerUserId)).count();
+            }
+
+            @Override
+            public void deleteById(ProjectId projectId) {
+                store.remove(projectId);
+            }
+        };
+    }
+
+    @Bean
+    public KnowledgeSourceStorePort testKnowledgeSourceStorePort() {
+        return new KnowledgeSourceStorePort() {
+            private final Map<KnowledgeSourceId, KnowledgeSource> store = new ConcurrentHashMap<>();
+
+            @Override
+            public KnowledgeSource save(KnowledgeSource source) {
+                store.put(source.id(), source);
+                return source;
+            }
+
+            @Override
+            public Optional<KnowledgeSource> findById(KnowledgeSourceId sourceId) {
+                return Optional.ofNullable(store.get(sourceId));
+            }
+
+            @Override
+            public Optional<KnowledgeSource> findByProjectAndPath(ProjectId projectId, String sourcePath) {
+                return store.values().stream()
+                        .filter(s -> s.projectId().equals(projectId) && s.sourcePath().equals(sourcePath))
+                        .findFirst();
+            }
+
+            @Override
+            public List<KnowledgeSource> findByProjectAndOwner(ProjectId projectId, UserId ownerUserId) {
+                return store.values().stream()
+                        .filter(s -> s.belongsTo(projectId, ownerUserId))
+                        .toList();
+            }
+
+            @Override
+            public void deleteById(KnowledgeSourceId sourceId) {
+                store.remove(sourceId);
+            }
+
+            @Override
+            public void deleteByProject(ProjectId projectId, UserId ownerUserId) {
+                store.entrySet().removeIf(e -> e.getValue().belongsTo(projectId, ownerUserId));
+            }
+        };
+    }
+
+    @Bean
+    public VectorKnowledgePort testVectorKnowledgePort(KnowledgeSourceStorePort sourceStore) {
+        return new VectorKnowledgePort() {
+            private final List<KnowledgeChunk> chunks = new CopyOnWriteArrayList<>();
+
+            @Override
+            public void replaceSourceChunks(KnowledgeSourceId sourceId, List<KnowledgeChunk> newChunks) {
+                chunks.removeIf(c -> c.sourceId().equals(sourceId));
+                chunks.addAll(newChunks);
+            }
+
+            @Override
+            public List<KnowledgeSearchMatch> searchSimilar(
+                    ProjectId projectId,
+                    UserId ownerUserId,
+                    EmbeddingVector queryVector,
+                    String embeddingVersion,
+                    int topK,
+                    double minScore
+            ) {
+                return chunks.stream()
+                        .filter(c -> c.projectId().equals(projectId)
+                                && c.ownerUserId().equals(ownerUserId)
+                                && c.embeddingVersion().equals(embeddingVersion))
+                        .map(c -> {
+                            KnowledgeSource source = sourceStore.findById(c.sourceId()).orElse(null);
+                            if (source == null) {
+                                return null;
+                            }
+                            double score = c.embedding().cosineSimilarity(queryVector);
+                            return new KnowledgeSearchMatch(
+                                    c.sourceId(),
+                                    source.sourcePath(),
+                                    source.title(),
+                                    c.chunkIndex(),
+                                    c.content(),
+                                    score,
+                                    c.embeddingVersion()
+                            );
+                        })
+                        .filter(m -> m != null && m.score() >= minScore)
+                        .sorted(Comparator.comparingDouble(KnowledgeSearchMatch::score).reversed())
+                        .limit(topK)
+                        .toList();
+            }
+
+            @Override
+            public void deleteBySource(KnowledgeSourceId sourceId) {
+                chunks.removeIf(c -> c.sourceId().equals(sourceId));
+            }
+
+            @Override
+            public void deleteByProject(ProjectId projectId, UserId ownerUserId) {
+                chunks.removeIf(c -> c.projectId().equals(projectId) && c.ownerUserId().equals(ownerUserId));
+            }
+        };
+    }
+
+    @Bean
+    public KnowledgeIndexJobStorePort testKnowledgeIndexJobStorePort() {
+        return new KnowledgeIndexJobStorePort() {
+            private final List<KnowledgeIndexJob> jobs = new CopyOnWriteArrayList<>();
+
+            @Override
+            public KnowledgeIndexJob save(KnowledgeIndexJob job) {
+                jobs.removeIf(existing -> existing.id().equals(job.id()));
+                jobs.add(job);
+                return job;
+            }
+
+            @Override
+            public List<KnowledgeIndexJob> findRecentByProjectAndOwner(
+                    ProjectId projectId,
+                    UserId ownerUserId,
+                    int limit
+            ) {
+                return jobs.stream()
+                        .filter(j -> j.projectId().equals(projectId) && j.ownerUserId().equals(ownerUserId))
+                        .sorted(Comparator.comparing(KnowledgeIndexJob::createdAt).reversed())
+                        .limit(limit)
+                        .toList();
             }
         };
     }
