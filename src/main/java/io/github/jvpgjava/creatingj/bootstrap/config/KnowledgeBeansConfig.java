@@ -6,6 +6,7 @@ import io.github.jvpgjava.creatingj.common.application.port.out.ClockPort;
 import io.github.jvpgjava.creatingj.knowledge.adapter.in.web.mapper.v1.KnowledgeHttpMapper;
 import io.github.jvpgjava.creatingj.knowledge.adapter.out.embedding.DeterministicHashedEmbeddingAdapter;
 import io.github.jvpgjava.creatingj.knowledge.adapter.out.embedding.OpenAiCompatibleEmbeddingAdapter;
+import io.github.jvpgjava.creatingj.knowledge.adapter.out.embedding.SpringAiTransformersEmbeddingAdapter;
 import io.github.jvpgjava.creatingj.knowledge.adapter.out.metrics.MicrometerKnowledgeMetricsAdapter;
 import io.github.jvpgjava.creatingj.knowledge.application.port.in.DeleteKnowledgeSourceUseCase;
 import io.github.jvpgjava.creatingj.knowledge.application.port.in.IngestKnowledgeSourceUseCase;
@@ -37,16 +38,29 @@ public class KnowledgeBeansConfig {
 
     @Bean
     public EmbeddingPort embeddingPort(EmbeddingProperties properties, ObjectMapper objectMapper) {
+        if ("onnx-local".equals(properties.provider())) {
+            return new SpringAiTransformersEmbeddingAdapter(
+                    properties.onnxVersionTag(),
+                    properties.onnxModelUri(),
+                    properties.onnxTokenizerUri(),
+                    properties.onnxCacheDir(),
+                    properties.onnxModelOutputName(),
+                    properties.onnxDocumentPrefix(),
+                    properties.onnxQueryPrefix(),
+                    properties.dimensions()
+            );
+        }
         if ("openai-compatible".equals(properties.provider())) {
             return new OpenAiCompatibleEmbeddingAdapter(
                     properties.baseUrl(),
                     properties.apiKey(),
                     properties.model(),
+                    properties.dimensions(),
                     Duration.ofSeconds(Math.max(1, properties.timeoutSeconds())),
                     objectMapper
             );
         }
-        return new DeterministicHashedEmbeddingAdapter();
+        return new DeterministicHashedEmbeddingAdapter(properties.dimensions());
     }
 
     @Bean

@@ -40,11 +40,12 @@ public class PgVectorKnowledgeStoreAdapter implements VectorKnowledgePort {
             jdbcClient.sql("""
                     INSERT INTO knowledge_chunks (
                         id, source_id, project_id, owner_user_id, chunk_index, content,
-                        content_hash, token_estimate, embedding_version, embedding, created_at
+                        content_hash, token_estimate, embedding_version, embedding_dimensions, embedding, created_at
                     )
                     VALUES (
                         :id, :sourceId, :projectId, :ownerUserId, :chunkIndex, :content,
-                        :contentHash, :tokenEstimate, :embeddingVersion, CAST(:embedding AS vector), :createdAt
+                        :contentHash, :tokenEstimate, :embeddingVersion, :embeddingDimensions,
+                        CAST(:embedding AS vector), :createdAt
                     )
                     """)
                     .param("id", chunk.id().value())
@@ -56,6 +57,7 @@ public class PgVectorKnowledgeStoreAdapter implements VectorKnowledgePort {
                     .param("contentHash", chunk.contentHash())
                     .param("tokenEstimate", chunk.tokenEstimate())
                     .param("embeddingVersion", chunk.embeddingVersion())
+                    .param("embeddingDimensions", chunk.embedding().dimensions())
                     .param("embedding", chunk.embedding().toPgVectorLiteral())
                     .param("createdAt", OffsetDateTime.ofInstant(chunk.createdAt(), ZoneOffset.UTC))
                     .update();
@@ -85,6 +87,7 @@ public class PgVectorKnowledgeStoreAdapter implements VectorKnowledgePort {
                   AND c.owner_user_id = :ownerUserId
                   AND s.owner_user_id = :ownerUserId
                   AND c.embedding_version = :embeddingVersion
+                  AND c.embedding_dimensions = :dimensions
                   AND (1.0 - (c.embedding <=> CAST(:queryVector AS vector))) >= :minScore
                 ORDER BY c.embedding <=> CAST(:queryVector AS vector) ASC
                 LIMIT :topK
@@ -92,6 +95,7 @@ public class PgVectorKnowledgeStoreAdapter implements VectorKnowledgePort {
                 .param("projectId", projectId.value())
                 .param("ownerUserId", ownerUserId.value())
                 .param("embeddingVersion", embeddingVersion)
+                .param("dimensions", queryVector.dimensions())
                 .param("queryVector", queryVector.toPgVectorLiteral())
                 .param("minScore", minScore)
                 .param("topK", topK)

@@ -142,7 +142,7 @@ public final class IngestKnowledgeSourceInteractor implements IngestKnowledgeSou
             List<KnowledgeChunk> chunks = new ArrayList<>(chunkTexts.size());
             for (int i = 0; i < chunkTexts.size(); i++) {
                 String chunkText = chunkTexts.get(i);
-                EmbeddingVector vector = embeddingPort.embed(chunkText);
+                EmbeddingVector vector = embeddingPort.embedDocument(chunkText);
                 chunks.add(new KnowledgeChunk(
                         KnowledgeChunkId.random(),
                         sourceId,

@@ -10,11 +10,19 @@ import java.util.Locale;
 
 public final class DeterministicHashedEmbeddingAdapter implements EmbeddingPort {
 
-    public static final String VERSION = "local-hash-v1-384";
+    private final int dimensions;
+
+    public DeterministicHashedEmbeddingAdapter() {
+        this(EmbeddingVector.DEFAULT_DIMENSIONS);
+    }
+
+    public DeterministicHashedEmbeddingAdapter(int dimensions) {
+        this.dimensions = dimensions;
+    }
 
     @Override
     public String embeddingVersion() {
-        return VERSION;
+        return "local-hash-v1-" + dimensions;
     }
 
     @Override
@@ -23,7 +31,7 @@ public final class DeterministicHashedEmbeddingAdapter implements EmbeddingPort 
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "Texto para embedding obrigatorio.");
         }
         String normalized = normalize(text);
-        float[] vector = new float[EmbeddingVector.EXPECTED_DIMENSIONS];
+        float[] vector = new float[dimensions];
         String[] tokens = normalized.split("[^a-z0-9_]+");
         for (String token : tokens) {
             if (token.isEmpty()) {

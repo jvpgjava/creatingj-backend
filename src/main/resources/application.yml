@@ -64,9 +64,16 @@ creatingj:
       base-url: ${CRJ_EMBEDDING_BASE_URL:${CRJ_API_BASE_URL:https://api.trystac.com/v1}}
       api-key: ${CRJ_EMBEDDING_API_KEY:${CRJ_API_KEY:}}
       model: ${CRJ_EMBEDDING_MODEL:}
-      dimensions: 384
+      dimensions: ${CRJ_EMBEDDING_DIMENSIONS:768}
       timeout-seconds: 15
       strict-url-validation: true
+      onnx-model-uri: ${CRJ_EMBEDDING_ONNX_MODEL_URI:https://huggingface.co/Xenova/multilingual-e5-base/resolve/main/onnx/model_quantized.onnx}
+      onnx-tokenizer-uri: ${CRJ_EMBEDDING_ONNX_TOKENIZER_URI:https://huggingface.co/Xenova/multilingual-e5-base/resolve/main/tokenizer.json}
+      onnx-cache-dir: ${CRJ_EMBEDDING_ONNX_CACHE_DIR:${user.home}/.creatingj/models/embeddings}
+      onnx-model-output-name: ${CRJ_EMBEDDING_ONNX_OUTPUT_NAME:last_hidden_state}
+      onnx-version-tag: ${CRJ_EMBEDDING_ONNX_VERSION_TAG:onnx:multilingual-e5-base-q8:768}
+      onnx-document-prefix: "${CRJ_EMBEDDING_ONNX_DOCUMENT_PREFIX:passage: }"
+      onnx-query-prefix: "${CRJ_EMBEDDING_ONNX_QUERY_PREFIX:query: }"
   retention:
     expired-sessions-days: 30
     expired-pairing-challenges-days: 7

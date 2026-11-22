@@ -7,15 +7,17 @@ import java.util.Arrays;
 
 public final class EmbeddingVector {
 
-    public static final int EXPECTED_DIMENSIONS = 384;
+    public static final int DEFAULT_DIMENSIONS = 768;
+    public static final int MIN_DIMENSIONS = 16;
+    public static final int MAX_DIMENSIONS = 4096;
 
     private final float[] values;
 
     public EmbeddingVector(float[] values) {
-        if (values == null || values.length != EXPECTED_DIMENSIONS) {
+        if (values == null || values.length < MIN_DIMENSIONS || values.length > MAX_DIMENSIONS) {
             throw new DomainException(
                     ErrorCode.VALIDATION_ERROR,
-                    "Vetor de embedding deve possuir exatamente " + EXPECTED_DIMENSIONS + " dimensoes."
+                    "Vetor de embedding deve possuir entre " + MIN_DIMENSIONS + " e " + MAX_DIMENSIONS + " dimensoes."
             );
         }
         float[] copy = Arrays.copyOf(values, values.length);
@@ -27,6 +29,18 @@ public final class EmbeddingVector {
         this.values = copy;
     }
 
+    public static EmbeddingVector ofExpectedDimensions(float[] values, int expectedDimensions) {
+        EmbeddingVector vector = new EmbeddingVector(values);
+        if (vector.dimensions() != expectedDimensions) {
+            throw new DomainException(
+                    ErrorCode.BAD_GATEWAY,
+                    "Dimensao de embedding incompativel: esperado " + expectedDimensions
+                            + ", recebido " + vector.dimensions() + "."
+            );
+        }
+        return vector;
+    }
+
     public float[] values() {
         return Arrays.copyOf(values, values.length);
     }
@@ -36,8 +50,8 @@ public final class EmbeddingVector {
     }
 
     public double cosineSimilarity(EmbeddingVector other) {
-        if (other == null) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Vetor de comparacao obrigatorio.");
+        if (other == null || other.values.length != this.values.length) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Vetores incompativeis para comparacao.");
         }
         double dot = 0.0;
         double normA = 0.0;

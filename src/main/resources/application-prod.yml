@@ -17,6 +17,9 @@ creatingj:
     ai:
       require-api-key: true
       strict-url-validation: true
+  knowledge:
+    embedding:
+      provider: ${CRJ_EMBEDDING_PROVIDER:onnx-local}
   retention:
     expired-sessions-days: 30
     expired-pairing-challenges-days: 7

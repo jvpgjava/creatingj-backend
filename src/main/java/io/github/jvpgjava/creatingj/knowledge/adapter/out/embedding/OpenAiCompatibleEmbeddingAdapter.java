@@ -23,6 +23,7 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
     private final URI embeddingsUri;
     private final String apiKey;
     private final String model;
+    private final int expectedDimensions;
     private final Duration timeout;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -31,6 +32,7 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
             String baseUrl,
             String apiKey,
             String model,
+            int expectedDimensions,
             Duration timeout,
             ObjectMapper objectMapper
     ) {
@@ -38,6 +40,7 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
         this.embeddingsUri = URI.create(normalizedBase + "/embeddings");
         this.apiKey = apiKey == null ? "" : apiKey;
         this.model = model == null ? "" : model.trim();
+        this.expectedDimensions = expectedDimensions;
         this.timeout = timeout == null ? Duration.ofSeconds(15) : timeout;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(this.timeout)
@@ -48,7 +51,7 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
 
     @Override
     public String embeddingVersion() {
-        return "openai:" + model + ":" + EmbeddingVector.EXPECTED_DIMENSIONS;
+        return "openai:" + model + ":" + expectedDimensions;
     }
 
     @Override
@@ -65,7 +68,7 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("input", text);
-        body.put("dimensions", EmbeddingVector.EXPECTED_DIMENSIONS);
+        body.put("dimensions", expectedDimensions);
         String payload = objectMapper.writeValueAsString(body);
 
         HttpRequest request = HttpRequest.newBuilder(embeddingsUri)
@@ -110,17 +113,17 @@ public final class OpenAiCompatibleEmbeddingAdapter implements EmbeddingPort {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
             JsonNode vectorNode = root.path("data").path(0).path("embedding");
-            if (!vectorNode.isArray() || vectorNode.size() != EmbeddingVector.EXPECTED_DIMENSIONS) {
+            if (!vectorNode.isArray() || vectorNode.size() != expectedDimensions) {
                 throw new DomainException(
                         ErrorCode.BAD_GATEWAY,
                         "Dimensao de embedding incompativel com o indice configurado."
                 );
             }
-            float[] values = new float[EmbeddingVector.EXPECTED_DIMENSIONS];
+            float[] values = new float[expectedDimensions];
             for (int i = 0; i < values.length; i++) {
                 values[i] = (float) vectorNode.get(i).asDouble();
             }
-            return new EmbeddingVector(values);
+            return EmbeddingVector.ofExpectedDimensions(values, expectedDimensions);
         } catch (DomainException ex) {
             throw ex;
         } catch (RuntimeException ex) {

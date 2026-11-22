@@ -50,7 +50,7 @@ public final class SearchProjectKnowledgeInteractor implements SearchProjectKnow
 
         long startedNanos = System.nanoTime();
         String embeddingVersion = embeddingPort.embeddingVersion();
-        EmbeddingVector queryVector = embeddingPort.embed(query.queryText().trim());
+        EmbeddingVector queryVector = embeddingPort.embedQuery(query.queryText().trim());
         List<KnowledgeSearchMatch> matches = vectorStore.searchSimilar(
                 query.projectId(),
                 query.actorUserId(),

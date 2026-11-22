@@ -86,6 +86,10 @@
             <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-transformers</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

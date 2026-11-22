@@ -7,4 +7,12 @@ public interface EmbeddingPort {
     String embeddingVersion();
 
     EmbeddingVector embed(String text);
+
+    default EmbeddingVector embedDocument(String text) {
+        return embed(text);
+    }
+
+    default EmbeddingVector embedQuery(String text) {
+        return embed(text);
+    }
 }

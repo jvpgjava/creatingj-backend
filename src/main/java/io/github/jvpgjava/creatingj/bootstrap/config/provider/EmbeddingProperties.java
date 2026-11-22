@@ -13,6 +13,11 @@ import java.util.Locale;
 @ConfigurationProperties(prefix = "creatingj.knowledge.embedding")
 public final class EmbeddingProperties {
 
+    private static final String DEFAULT_ONNX_MODEL =
+            "https://huggingface.co/Xenova/multilingual-e5-base/resolve/main/onnx/model_quantized.onnx";
+    private static final String DEFAULT_ONNX_TOKENIZER =
+            "https://huggingface.co/Xenova/multilingual-e5-base/resolve/main/tokenizer.json";
+
     private final String provider;
     private final String baseUrl;
     private final String apiKey;
@@ -20,15 +25,29 @@ public final class EmbeddingProperties {
     private final int dimensions;
     private final int timeoutSeconds;
     private final boolean strictUrlValidation;
+    private final String onnxModelUri;
+    private final String onnxTokenizerUri;
+    private final String onnxCacheDir;
+    private final String onnxModelOutputName;
+    private final String onnxVersionTag;
+    private final String onnxDocumentPrefix;
+    private final String onnxQueryPrefix;
 
     public EmbeddingProperties(
             @DefaultValue("local-hash") String provider,
             @DefaultValue("https://api.trystac.com/v1") String baseUrl,
             @DefaultValue("") String apiKey,
             @DefaultValue("") String model,
-            @DefaultValue("384") int dimensions,
+            @DefaultValue("768") int dimensions,
             @DefaultValue("15") int timeoutSeconds,
-            @DefaultValue("true") boolean strictUrlValidation
+            @DefaultValue("true") boolean strictUrlValidation,
+            @DefaultValue(DEFAULT_ONNX_MODEL) String onnxModelUri,
+            @DefaultValue(DEFAULT_ONNX_TOKENIZER) String onnxTokenizerUri,
+            @DefaultValue("") String onnxCacheDir,
+            @DefaultValue("last_hidden_state") String onnxModelOutputName,
+            @DefaultValue("onnx:multilingual-e5-base-q8:768") String onnxVersionTag,
+            @DefaultValue("passage: ") String onnxDocumentPrefix,
+            @DefaultValue("query: ") String onnxQueryPrefix
     ) {
         this.provider = provider == null ? "local-hash" : provider.trim().toLowerCase(Locale.ROOT);
         this.baseUrl = baseUrl == null ? "" : baseUrl.trim();
@@ -37,6 +56,15 @@ public final class EmbeddingProperties {
         this.dimensions = dimensions;
         this.timeoutSeconds = timeoutSeconds;
         this.strictUrlValidation = strictUrlValidation;
+        this.onnxModelUri = onnxModelUri == null ? DEFAULT_ONNX_MODEL : onnxModelUri.trim();
+        this.onnxTokenizerUri = onnxTokenizerUri == null ? DEFAULT_ONNX_TOKENIZER : onnxTokenizerUri.trim();
+        this.onnxCacheDir = onnxCacheDir == null ? "" : onnxCacheDir.trim();
+        this.onnxModelOutputName = onnxModelOutputName == null || onnxModelOutputName.isBlank()
+                ? "last_hidden_state" : onnxModelOutputName.trim();
+        this.onnxVersionTag = onnxVersionTag == null || onnxVersionTag.isBlank()
+                ? "onnx:multilingual-e5-base-q8:768" : onnxVersionTag.trim();
+        this.onnxDocumentPrefix = onnxDocumentPrefix == null ? "" : onnxDocumentPrefix;
+        this.onnxQueryPrefix = onnxQueryPrefix == null ? "" : onnxQueryPrefix;
     }
 
     public String provider() {
@@ -67,30 +95,68 @@ public final class EmbeddingProperties {
         return strictUrlValidation;
     }
 
+    public String onnxModelUri() {
+        return onnxModelUri;
+    }
+
+    public String onnxTokenizerUri() {
+        return onnxTokenizerUri;
+    }
+
+    public String onnxCacheDir() {
+        return onnxCacheDir;
+    }
+
+    public String onnxModelOutputName() {
+        return onnxModelOutputName;
+    }
+
+    public String onnxVersionTag() {
+        return onnxVersionTag;
+    }
+
+    public String onnxDocumentPrefix() {
+        return onnxDocumentPrefix;
+    }
+
+    public String onnxQueryPrefix() {
+        return onnxQueryPrefix;
+    }
+
     @PostConstruct
     public void validatePolicy() {
-        if (dimensions != EmbeddingVector.EXPECTED_DIMENSIONS) {
+        if (dimensions < EmbeddingVector.MIN_DIMENSIONS || dimensions > EmbeddingVector.MAX_DIMENSIONS) {
             throw new IllegalStateException(
-                    "Dimensao de embedding configurada deve ser " + EmbeddingVector.EXPECTED_DIMENSIONS + "."
+                    "Dimensao de embedding deve estar entre " + EmbeddingVector.MIN_DIMENSIONS
+                            + " e " + EmbeddingVector.MAX_DIMENSIONS + "."
             );
         }
-        if (!"local-hash".equals(provider) && !"openai-compatible".equals(provider)) {
+        if (!"local-hash".equals(provider)
+                && !"onnx-local".equals(provider)
+                && !"openai-compatible".equals(provider)) {
             throw new IllegalStateException("Provedor de embeddings nao suportado: " + provider);
         }
         if ("openai-compatible".equals(provider)) {
-            validateBaseUrl();
+            validateRemoteUrl(baseUrl, false);
+        }
+        if ("onnx-local".equals(provider)) {
+            validateRemoteUrl(onnxModelUri, true);
+            validateRemoteUrl(onnxTokenizerUri, true);
         }
     }
 
-    private void validateBaseUrl() {
-        if (baseUrl.isBlank()) {
-            throw new IllegalStateException("URL base do provedor de embeddings obrigatoria.");
+    private void validateRemoteUrl(String rawUrl, boolean allowFileScheme) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            throw new IllegalStateException("URL do provedor de embeddings obrigatoria.");
         }
         URI uri;
         try {
-            uri = URI.create(baseUrl);
+            uri = URI.create(rawUrl);
         } catch (IllegalArgumentException ex) {
             throw new IllegalStateException("URL do provedor de embeddings invalida.", ex);
+        }
+        if (allowFileScheme && "file".equalsIgnoreCase(uri.getScheme())) {
+            return;
         }
         if (!strictUrlValidation) {
             return;
@@ -146,6 +212,7 @@ public final class EmbeddingProperties {
                 + ", dimensions=" + dimensions
                 + ", timeoutSeconds=" + timeoutSeconds
                 + ", strictUrlValidation=" + strictUrlValidation
+                + ", onnxVersionTag='" + onnxVersionTag + '\''
                 + '}';
     }
 }

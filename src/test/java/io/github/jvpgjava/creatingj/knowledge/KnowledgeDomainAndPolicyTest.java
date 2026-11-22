@@ -102,14 +102,21 @@ class KnowledgeDomainAndPolicyTest {
         EmbeddingVector v2 = embedder.embed("PostgreSQL pgvector hexagonal architecture");
         EmbeddingVector v3 = embedder.embed("chocolate cake baking recipe oven temperature");
 
-        assertThat(v1.dimensions()).isEqualTo(EmbeddingVector.EXPECTED_DIMENSIONS);
+        assertThat(v1.dimensions()).isEqualTo(EmbeddingVector.DEFAULT_DIMENSIONS);
         assertThat(v1.cosineSimilarity(v2)).isGreaterThan(v1.cosineSimilarity(v3));
         assertThat(v1.toPgVectorLiteral()).startsWith("[").endsWith("]");
         assertThat(ContentHasher.sha256Hex("abc")).hasSize(64);
 
+        EmbeddingVector v384 = new DeterministicHashedEmbeddingAdapter(384).embed("dynamic dimensions");
+        assertThat(v384.dimensions()).isEqualTo(384);
+        assertThatThrownBy(() -> v1.cosineSimilarity(v384)).isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> EmbeddingVector.ofExpectedDimensions(v384.values(), 768))
+                .isInstanceOf(DomainException.class)
+                .extracting(ex -> ((DomainException) ex).errorCode()).isEqualTo(ErrorCode.BAD_GATEWAY);
+
         float[] invalid = new float[10];
         assertThatThrownBy(() -> new EmbeddingVector(invalid)).isInstanceOf(DomainException.class);
-        float[] withNan = new float[EmbeddingVector.EXPECTED_DIMENSIONS];
+        float[] withNan = new float[EmbeddingVector.DEFAULT_DIMENSIONS];
         withNan[0] = Float.NaN;
         assertThatThrownBy(() -> new EmbeddingVector(withNan)).isInstanceOf(DomainException.class);
 
@@ -139,24 +146,41 @@ class KnowledgeDomainAndPolicyTest {
     @Test
     void shouldEnforceEmbeddingPropertiesSsrfAndRedaction() {
         EmbeddingProperties localProps = new EmbeddingProperties(
-                "local-hash", "https://api.trystac.com/v1", "top-secret-key", "", 384, 15, true);
+                "local-hash", "https://api.trystac.com/v1", "top-secret-key", "", 768, 15, true,
+                null, null, "", null, null, null, null);
         localProps.validatePolicy();
         assertThat(localProps.toString()).doesNotContain("top-secret-key").contains("[REDACTED]");
 
+        EmbeddingProperties onnxProps = new EmbeddingProperties(
+                "onnx-local", "https://api.trystac.com/v1", "", "", 768, 15, true,
+                "file:///opt/creatingj/models/model.onnx",
+                "file:///opt/creatingj/models/tokenizer.json",
+                "/tmp/cache", "last_hidden_state", "onnx:e5:768", "passage: ", "query: ");
+        onnxProps.validatePolicy();
+
         EmbeddingProperties badUrl = new EmbeddingProperties(
-                "openai-compatible", "http://169.254.169.254/v1", "key", "m", 384, 15, true);
+                "openai-compatible", "http://169.254.169.254/v1", "key", "m", 768, 15, true,
+                null, null, "", null, null, null, null);
         assertThatThrownBy(badUrl::validatePolicy).isInstanceOf(IllegalStateException.class);
 
         EmbeddingProperties privateIp = new EmbeddingProperties(
-                "openai-compatible", "https://127.0.0.1/v1", "key", "m", 384, 15, true);
+                "openai-compatible", "https://127.0.0.1/v1", "key", "m", 768, 15, true,
+                null, null, "", null, null, null, null);
         assertThatThrownBy(privateIp::validatePolicy).isInstanceOf(IllegalStateException.class);
 
         EmbeddingProperties badDim = new EmbeddingProperties(
-                "local-hash", "https://api.trystac.com/v1", "", "", 1536, 15, true);
+                "local-hash", "https://api.trystac.com/v1", "", "", 5000, 15, true,
+                null, null, "", null, null, null, null);
         assertThatThrownBy(badDim::validatePolicy).isInstanceOf(IllegalStateException.class);
 
+        EmbeddingProperties valid1536 = new EmbeddingProperties(
+                "openai-compatible", "https://api.trystac.com/v1", "key", "text-embedding-3-small", 1536, 15, true,
+                null, null, "", null, null, null, null);
+        valid1536.validatePolicy();
+
         EmbeddingProperties badProvider = new EmbeddingProperties(
-                "unknown", "https://api.trystac.com/v1", "", "", 384, 15, true);
+                "unknown", "https://api.trystac.com/v1", "", "", 768, 15, true,
+                null, null, "", null, null, null, null);
         assertThatThrownBy(badProvider::validatePolicy).isInstanceOf(IllegalStateException.class);
     }
 

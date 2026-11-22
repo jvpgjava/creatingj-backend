@@ -51,13 +51,14 @@ class OpenAiCompatibleEmbeddingAdapterTest {
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
                 secretKey,
                 "text-embedding-3-small",
+                EmbeddingVector.DEFAULT_DIMENSIONS,
                 Duration.ofSeconds(5),
                 new ObjectMapper()
         );
 
-        assertThat(adapter.embeddingVersion()).isEqualTo("openai:text-embedding-3-small:384");
+        assertThat(adapter.embeddingVersion()).isEqualTo("openai:text-embedding-3-small:768");
         EmbeddingVector vector = adapter.embed("hello pgvector");
-        assertThat(vector.dimensions()).isEqualTo(EmbeddingVector.EXPECTED_DIMENSIONS);
+        assertThat(vector.dimensions()).isEqualTo(EmbeddingVector.DEFAULT_DIMENSIONS);
 
         responseBody.set("{\"data\":[{\"embedding\":[0.1,0.2,0.3]}]}");
         assertThatThrownBy(() -> adapter.embed("wrong dim"))
@@ -91,7 +92,7 @@ class OpenAiCompatibleEmbeddingAdapterTest {
 
     private static String valid384Response() {
         StringBuilder sb = new StringBuilder("{\"data\":[{\"embedding\":[");
-        for (int i = 0; i < EmbeddingVector.EXPECTED_DIMENSIONS; i++) {
+        for (int i = 0; i < EmbeddingVector.DEFAULT_DIMENSIONS; i++) {
             if (i > 0) {
                 sb.append(',');
             }
