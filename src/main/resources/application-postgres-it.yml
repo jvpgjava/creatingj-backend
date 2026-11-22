@@ -1,0 +1,13 @@
+creatingj:
+  docs:
+    public-access: false
+  security:
+    cookie:
+      secure: false
+    cors:
+      allowed-origins:
+        - http://localhost:4200
+  provider:
+    ai:
+      require-api-key: false
+      strict-url-validation: true

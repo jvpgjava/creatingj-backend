@@ -1,0 +1,17 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+
+creatingj:
+  docs:
+    public-access: true
+  security:
+    cookie:
+      secure: false
+    cors:
+      allowed-origins:
+        - http://localhost:4200
+  provider:
+    ai:
+      require-api-key: false
+      strict-url-validation: true

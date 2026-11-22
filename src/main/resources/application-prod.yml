@@ -1,0 +1,19 @@
+server:
+  address: 127.0.0.1
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+creatingj:
+  docs:
+    public-access: false
+  security:
+    cookie:
+      secure: true
+  provider:
+    ai:
+      require-api-key: true
+      strict-url-validation: true

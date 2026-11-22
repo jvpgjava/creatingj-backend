@@ -1,0 +1,22 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+
+creatingj:
+  persistence:
+    jdbc:
+      enabled: false
+  docs:
+    public-access: true
+  security:
+    cookie:
+      secure: false
+    cors:
+      allowed-origins:
+        - http://localhost:4200
+  provider:
+    ai:
+      require-api-key: false
+      strict-url-validation: true
