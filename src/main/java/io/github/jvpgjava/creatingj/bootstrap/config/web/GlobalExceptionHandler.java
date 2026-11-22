@@ -132,7 +132,10 @@ public final class GlobalExceptionHandler {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case METHOD_NOT_ALLOWED -> HttpStatus.METHOD_NOT_ALLOWED;
             case UNSUPPORTED_MEDIA_TYPE -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
-            case TOO_MANY_REQUESTS -> HttpStatus.TOO_MANY_REQUESTS;
+            case TOO_MANY_REQUESTS, PROVIDER_RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
+            case BAD_GATEWAY -> HttpStatus.BAD_GATEWAY;
+            case PROVIDER_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+            case PROVIDER_TIMEOUT -> HttpStatus.GATEWAY_TIMEOUT;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

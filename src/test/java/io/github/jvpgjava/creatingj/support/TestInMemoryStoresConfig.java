@@ -2,6 +2,13 @@ package io.github.jvpgjava.creatingj.support;
 
 import io.github.jvpgjava.creatingj.audit.application.port.out.AuditPort;
 import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
+import io.github.jvpgjava.creatingj.conversation.application.port.out.ConversationStorePort;
+import io.github.jvpgjava.creatingj.conversation.application.port.out.GenerationStorePort;
+import io.github.jvpgjava.creatingj.conversation.application.port.out.MessageStorePort;
+import io.github.jvpgjava.creatingj.conversation.domain.ChatMessage;
+import io.github.jvpgjava.creatingj.conversation.domain.Conversation;
+import io.github.jvpgjava.creatingj.conversation.domain.ConversationId;
+import io.github.jvpgjava.creatingj.conversation.domain.Generation;
 import io.github.jvpgjava.creatingj.identity.application.port.in.ListUsersUseCase.UserSortField;
 import io.github.jvpgjava.creatingj.identity.application.port.out.AuthorizationCodeStorePort;
 import io.github.jvpgjava.creatingj.identity.application.port.out.InvitationStorePort;
@@ -176,5 +183,88 @@ public class TestInMemoryStoresConfig {
     public AuditPort testAuditPort() {
         List<AuditEvent> events = new CopyOnWriteArrayList<>();
         return events::add;
+    }
+
+    @Bean
+    public ConversationStorePort testConversationStorePort() {
+        return new ConversationStorePort() {
+            private final Map<ConversationId, Conversation> store = new ConcurrentHashMap<>();
+
+            @Override
+            public Conversation save(Conversation conversation) {
+                store.put(conversation.id(), conversation);
+                return conversation;
+            }
+
+            @Override
+            public Optional<Conversation> findByIdAndOwner(ConversationId id, UserId ownerUserId) {
+                return Optional.ofNullable(store.get(id)).filter(c -> c.isOwnedBy(ownerUserId));
+            }
+
+            @Override
+            public List<Conversation> findPageByOwner(UserId ownerUserId, int page, int size) {
+                return store.values().stream()
+                        .filter(c -> c.isOwnedBy(ownerUserId))
+                        .skip((long) page * size)
+                        .limit(size)
+                        .toList();
+            }
+
+            @Override
+            public long countByOwner(UserId ownerUserId) {
+                return store.values().stream().filter(c -> c.isOwnedBy(ownerUserId)).count();
+            }
+        };
+    }
+
+    @Bean
+    public MessageStorePort testMessageStorePort() {
+        return new MessageStorePort() {
+            private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
+
+            @Override
+            public ChatMessage save(ChatMessage message) {
+                messages.add(message);
+                return message;
+            }
+
+            @Override
+            public List<ChatMessage> findByConversationOrderBySequenceAsc(ConversationId conversationId) {
+                return messages.stream().filter(m -> m.conversationId().equals(conversationId)).toList();
+            }
+
+            @Override
+            public int nextSequenceNumber(ConversationId conversationId) {
+                return (int) messages.stream().filter(m -> m.conversationId().equals(conversationId)).count() + 1;
+            }
+        };
+    }
+
+    @Bean
+    public GenerationStorePort testGenerationStorePort() {
+        return new GenerationStorePort() {
+            private final Map<UUID, Generation> store = new ConcurrentHashMap<>();
+
+            @Override
+            public Generation save(Generation generation) {
+                store.put(generation.id(), generation);
+                return generation;
+            }
+
+            @Override
+            public Optional<Generation> findByIdAndConversationAndOwner(
+                    UUID generationId,
+                    ConversationId conversationId,
+                    UserId ownerUserId
+            ) {
+                return Optional.ofNullable(store.get(generationId))
+                        .filter(g -> g.conversationId().equals(conversationId) && g.ownerUserId().equals(ownerUserId));
+            }
+
+            @Override
+            public List<Generation> findByConversationOrderByCreatedAtDesc(ConversationId conversationId) {
+                return store.values().stream().filter(g -> g.conversationId().equals(conversationId)).toList();
+            }
+        };
     }
 }

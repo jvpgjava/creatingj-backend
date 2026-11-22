@@ -3,6 +3,7 @@ package io.github.jvpgjava.creatingj.bootstrap.config.security;
 import io.github.jvpgjava.creatingj.bootstrap.config.web.ProblemDetailsFactory;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.security.SessionAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -84,6 +85,7 @@ public class SecurityConfig {
                                         "Acesso negado."))
                 )
                 .authorizeHttpRequests(auth -> {
+                    auth.dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll();
                     auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/actuator/health").permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/api/v1/system/status").permitAll();

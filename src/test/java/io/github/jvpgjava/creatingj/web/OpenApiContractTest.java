@@ -64,6 +64,12 @@ class OpenApiContractTest {
         assertThat(generated.path("paths").has("/api/v1/auth/pkce/authorize")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/pkce/token")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/token/refresh")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/conversations")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/conversations/{conversationId}")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/conversations/{conversationId}/messages")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/conversations/{conversationId}/messages/stream")).isTrue();
+        assertThat(generated.path("paths")
+                .has("/api/v1/conversations/{conversationId}/generations/{generationId}/cancel")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("bearerAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("cookieAuth")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/register")).isFalse();
