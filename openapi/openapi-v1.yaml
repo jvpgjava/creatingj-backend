@@ -1,7 +1,18 @@
 openapi: 3.1.0
 info:
   title: CreatingJ API
-  description: Contrato versionado da plataforma CreatingJ
+  description: |
+    Contrato HTTP versionado da plataforma CreatingJ (v1).
+
+    ### Como testar pelo Swagger UI
+    1. Autentique via `POST /api/v1/auth/login` para obter um `accessToken` opaco.
+    2. Clique em **Authorize**, informe o token em `bearerAuth` e execute os endpoints protegidos.
+    3. Para fluxo web com cookie (`POST /api/v1/auth/web/login`), envie o header `X-XSRF-TOKEN` em mutacoes (`POST`, `PUT`, `PATCH`, `DELETE`).
+    4. Endpoints `/api/v1/runner/**` exigem exclusivamente o header `X-Device-Token` emitido no pareamento.
+
+    ### Padroes do contrato
+    - Erros seguem RFC 9457 (`application/problem+json`) com `errorCode` e `traceId`.
+    - Endpoints de streaming utilizam `text/event-stream` (SSE).
   version: v1
 servers:
 - url: /
@@ -42,13 +53,17 @@ paths:
       tags:
       - Admin Usage
       summary: Configurar quotas diarias e limite de concorrencia de um usuario
+      description: "Define ou atualiza limite diario de tokens, requisicoes e concorrencia\
+        \ para o usuario alvo."
       operationId: updateUserQuota
       parameters:
       - name: userId
         in: path
+        description: Identificador UUID do usuario alvo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440001
       requestBody:
         content:
           application/json:
@@ -88,15 +103,18 @@ paths:
       tags:
       - Remote Tasks
       summary: Listar tarefas remotas recentes do usuario
+      description: Retorna as tarefas mais recentes do usuario autenticado.
       operationId: listRemoteTasks
       parameters:
       - name: limit
         in: query
+        description: Quantidade maxima de tarefas retornadas (1..50)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       responses:
         "200":
           description: Lista de tarefas
@@ -117,6 +135,9 @@ paths:
       tags:
       - Remote Tasks
       summary: Enfileirar tarefa remota para dispositivo autorizado
+      description: "Enfileira tarefa para execucao pelo runner do dispositivo. Caso\
+        \ o dispositivo esteja offline, a tarefa permanece em QUEUED ate o proximo\
+        \ lease sem simular execucao."
       operationId: createRemoteTask
       requestBody:
         content:
@@ -163,13 +184,17 @@ paths:
       tags:
       - Remote Tasks
       summary: Cancelar tarefa remota e rejeitar aprovacoes pendentes
+      description: Interrompe a tarefa e marca automaticamente quaisquer aprovacoes
+        pendentes como rejeitadas.
       operationId: cancelRemoteTask
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa remota
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       responses:
         "200":
           description: Tarefa cancelada
@@ -197,18 +222,24 @@ paths:
       tags:
       - Remote Tasks
       summary: Aprovar ou rejeitar solicitacao pontual do runner
+      description: Decide um pedido de aprovacao pendente dentro do seu TTL. Cada
+        aprovacao e de uso unico.
       operationId: decideRemoteToolApproval
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa remota
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       - name: approvalId
         in: path
+        description: Identificador UUID do pedido de aprovacao
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440062
       requestBody:
         content:
           application/json:
@@ -248,13 +279,17 @@ paths:
       tags:
       - Runner Protocol
       summary: Reportar evento de progresso com deduplicacao
+      description: "Persiste evento de progresso da tarefa e propaga em tempo real\
+        \ via SSE, deduplicando retentativas pela chave eventKey."
       operationId: reportRunnerTaskEvent
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa atribuida ao dispositivo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       requestBody:
         content:
           application/json:
@@ -287,13 +322,17 @@ paths:
       tags:
       - Runner Protocol
       summary: Concluir ou falhar tarefa atribuida ao dispositivo
+      description: Marca a tarefa como COMPLETED ou FAILED e registra o resumo final
+        de execucao.
       operationId: completeRunnerTask
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa atribuida ao dispositivo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       requestBody:
         content:
           application/json:
@@ -326,13 +365,17 @@ paths:
       tags:
       - Runner Protocol
       summary: Solicitar aprovacao pontual com TTL para tool
+      description: Submete ferramenta/comando para avaliacao pela politica deterministica
+        e cria pedido de aprovacao humana de uso unico com expiracao configurada.
       operationId: requestRunnerToolApproval
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa atribuida ao dispositivo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       requestBody:
         content:
           application/json:
@@ -371,6 +414,8 @@ paths:
       tags:
       - Runner Protocol
       summary: Adquirir lease da proxima tarefa destinada ao runner
+      description: Consulta a fila de tarefas do dispositivo autenticado via X-Device-Token
+        e adquire lease temporario da proxima tarefa pendente.
       operationId: leaseNextRunnerTask
       responses:
         "200":
@@ -438,22 +483,28 @@ paths:
       tags:
       - Projects
       summary: Listar projetos do usuario autenticado
+      description: Retorna pagina de projetos pertencentes exclusivamente ao usuario
+        autenticado.
       operationId: listProjects
       parameters:
       - name: page
         in: query
+        description: Indice da pagina (base 0)
         required: false
         schema:
           type: integer
           format: int32
           default: 0
+        example: 0
       - name: size
         in: query
+        description: Tamanho da pagina (1..100)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       responses:
         "200":
           description: Pagina de projetos
@@ -474,6 +525,8 @@ paths:
       tags:
       - Projects
       summary: Criar um projeto proprio
+      description: Cria um projeto isolado na conta do usuario autenticado para organizar
+        RAG e agentes.
       operationId: createProject
       requestBody:
         content:
@@ -514,13 +567,16 @@ paths:
       tags:
       - Knowledge RAG
       summary: Listar fontes indexadas de um projeto proprio
+      description: Retorna todas as fontes cadastradas no indice vetorial do projeto.
       operationId: listKnowledgeSources
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       responses:
         "200":
           description: Lista de fontes
@@ -548,13 +604,17 @@ paths:
       - Knowledge RAG
       summary: Ingerir ou atualizar fonte de conhecimento de um projeto com deduplicacao
         e pgvector
+      description: "Valida caminho seguro e ausencia de segredos, calcula hash SHA-256\
+        \ para deduplicacao, gera chunks e grava embeddings no pgvector."
       operationId: ingestKnowledgeSource
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       requestBody:
         content:
           application/json:
@@ -594,13 +654,17 @@ paths:
       tags:
       - Knowledge RAG
       summary: Executar busca vetorial pgvector filtrada por proprietario e projeto
+      description: Converte a consulta em embedding usando o provedor ativo e retorna
+        os trechos mais semelhantes por distancia de cosseno dentro do projeto.
       operationId: searchProjectKnowledge
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       requestBody:
         content:
           application/json:
@@ -640,20 +704,26 @@ paths:
       tags:
       - Agent Orchestration
       summary: Listar execucoes recentes de agente do projeto
+      description: Retorna as execucoes do projeto pertencente ao usuario autenticado
+        em ordem decrescente.
       operationId: listAgentRuns
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: limit
         in: query
+        description: Quantidade maxima de execucoes retornadas (1..50)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       responses:
         "200":
           description: Lista de execucoes
@@ -681,13 +751,18 @@ paths:
       - Agent Orchestration
       summary: "Planejar acoes de agente com contexto do workspace, RAG e guardrails\
         \ deterministicos"
+      description: "Recebe objetivo, snapshots opcionais do workspace e consulta RAG\
+        \ do projeto. O servidor planeja propostas de ferramentas e aplica a politica\
+        \ deterministica sem executar comandos locais."
       operationId: createAgentRun
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       requestBody:
         content:
           application/json:
@@ -733,23 +808,32 @@ paths:
       tags:
       - Agent Orchestration
       summary: Aprovar ou rejeitar proposta pendente de ferramenta do agente
+      description: Registra a decisao humana sobre uma proposta classificada como
+        REQUIRE_APPROVAL. Propostas bloqueadas por politica (DENY) nunca podem ser
+        aprovadas.
       operationId: decideToolProposal
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: runId
         in: path
+        description: Identificador UUID da execucao do agente
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440040
       - name: proposalId
         in: path
+        description: Identificador UUID da proposta de ferramenta
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440041
       requestBody:
         content:
           application/json:
@@ -789,18 +873,24 @@ paths:
       tags:
       - Agent Orchestration
       summary: Cancelar execucao do agente e rejeitar propostas pendentes
+      description: Encerra a execucao imediatamente e marca todas as propostas pendentes
+        como rejeitadas.
       operationId: cancelAgentRun
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: runId
         in: path
+        description: Identificador UUID da execucao do agente
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440040
       responses:
         "200":
           description: Execucao cancelada
@@ -828,13 +918,17 @@ paths:
       tags:
       - Devices
       summary: Revogar dispositivo e invalidar suas credenciais
+      description: Invalida imediatamente o X-Device-Token do dispositivo e impede
+        novos leases de tarefa.
       operationId: revokeDevice
       parameters:
       - name: deviceId
         in: path
+        description: Identificador UUID do dispositivo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440050
       responses:
         "200":
           description: Dispositivo revogado
@@ -862,6 +956,8 @@ paths:
       tags:
       - Devices
       summary: Gerar codigo de pareamento de uso unico
+      description: Emite um codigo temporario para parear o agente local via POST
+        /api/v1/runner/pair/complete.
       operationId: createPairingChallenge
       requestBody:
         content:
@@ -896,22 +992,27 @@ paths:
       tags:
       - Conversations
       summary: Listar conversas do usuario autenticado de forma paginada
+      description: Retorna as conversas proprias ordenadas pela atualizacao mais recente.
       operationId: listOwnConversations
       parameters:
       - name: page
         in: query
+        description: Indice da pagina (base 0)
         required: false
         schema:
           type: integer
           format: int32
           default: 0
+        example: 0
       - name: size
         in: query
+        description: Tamanho da pagina (1..100)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       responses:
         "200":
           description: Pagina de conversas
@@ -932,6 +1033,8 @@ paths:
       tags:
       - Conversations
       summary: Criar nova conversa do usuario autenticado
+      description: "Cria uma conversa isolada para o usuario autenticado, usando o\
+        \ modelo informado ou o modelo padrao do provedor."
       operationId: createConversation
       requestBody:
         content:
@@ -966,13 +1069,17 @@ paths:
       tags:
       - Conversations
       summary: Enviar mensagem e receber resposta sincrona do modelo
+      description: "Persiste a mensagem do usuario, consulta o provedor configurado\
+        \ respeitando cotas e rate limit e retorna a resposta completa do assistente."
       operationId: sendMessage
       parameters:
       - name: conversationId
         in: path
+        description: Identificador UUID da conversa
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440020
       requestBody:
         content:
           application/json:
@@ -1030,9 +1137,11 @@ paths:
       parameters:
       - name: conversationId
         in: path
+        description: Identificador UUID da conversa
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440020
       requestBody:
         content:
           application/json:
@@ -1058,18 +1167,24 @@ paths:
       tags:
       - Conversations
       summary: Cancelar geracao em andamento da conversa
+      description: Sinaliza o cancelamento de uma geracao ativa de streaming e retorna
+        seu estado atualizado.
       operationId: cancelGeneration
       parameters:
       - name: conversationId
         in: path
+        description: Identificador UUID da conversa
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440020
       - name: generationId
         in: path
+        description: Identificador UUID da geracao
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440021
       responses:
         "200":
           description: Status da geracao apos cancelamento
@@ -1360,35 +1475,45 @@ paths:
       parameters:
       - name: page
         in: query
+        description: Indice da pagina (base 0)
         required: false
         schema:
           type: integer
           format: int32
           default: 0
+        example: 0
       - name: size
         in: query
+        description: Tamanho da pagina (1..100)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       - name: status
         in: query
+        description: "Filtro opcional de status (PENDING_ACTIVATION, ACTIVE, SUSPENDED)"
         required: false
         schema:
           type: string
+        example: ACTIVE
       - name: sort
         in: query
+        description: "Campo de ordenacao permitido (createdAt, email, displayName)"
         required: false
         schema:
           type: string
           default: created_at
+        example: createdAt
       - name: direction
         in: query
+        description: Direcao da ordenacao (asc ou desc)
         required: false
         schema:
           type: string
           default: desc
+        example: desc
       responses:
         "200":
           description: Pagina de usuarios
@@ -1472,9 +1597,11 @@ paths:
       parameters:
       - name: userId
         in: path
+        description: Identificador UUID do usuario alvo
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440001
       responses:
         "200":
           description: Usuario suspenso
@@ -1564,13 +1691,17 @@ paths:
       tags:
       - Remote Tasks
       summary: "Obter detalhes, eventos e aprovacoes de uma tarefa"
+      description: "Consulta o estado completo da tarefa, eventos cronologicos e aprovacoes\
+        \ de tools."
       operationId: getRemoteTask
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa remota
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       responses:
         "200":
           description: Detalhes da tarefa
@@ -1598,13 +1729,17 @@ paths:
       tags:
       - Remote Tasks
       summary: Acompanhar progresso de uma tarefa remota via SSE
+      description: Abre fluxo text/event-stream com o snapshot inicial da tarefa e
+        eventos subsequentes.
       operationId: streamRemoteTaskEvents
       parameters:
       - name: taskId
         in: path
+        description: Identificador UUID da tarefa remota
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440060
       responses:
         "200":
           description: Stream SSE de eventos da tarefa
@@ -1650,13 +1785,16 @@ paths:
       tags:
       - Projects
       summary: Obter detalhes de um projeto proprio
+      description: Consulta metadados de um projeto pertencente ao usuario autenticado.
       operationId: getProject
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       responses:
         "200":
           description: Projeto encontrado
@@ -1683,13 +1821,17 @@ paths:
       tags:
       - Projects
       summary: Excluir projeto proprio e respectivos vetores RAG
+      description: "Remove o projeto e, em cascata, todas as fontes de conhecimento,\
+        \ chunks e jobs vinculados."
       operationId: deleteProject
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       responses:
         "204":
           description: Projeto excluido
@@ -1713,20 +1855,26 @@ paths:
       tags:
       - Knowledge RAG
       summary: Listar jobs recentes de indexacao do projeto
+      description: "Retorna historico de jobs de ingestao, deduplicacao e exclusao\
+        \ executados no projeto."
       operationId: listKnowledgeIndexJobs
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: limit
         in: query
+        description: Quantidade maxima de jobs retornados (1..50)
         required: false
         schema:
           type: integer
           format: int32
           default: 20
+        example: 20
       responses:
         "200":
           description: Lista de jobs de indexacao
@@ -1754,18 +1902,24 @@ paths:
       tags:
       - Agent Orchestration
       summary: Consultar detalhes e propostas de uma execucao do agente
+      description: Retorna o resumo do plano e todas as propostas de ferramenta com
+        seus vereditos.
       operationId: getAgentRun
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: runId
         in: path
+        description: Identificador UUID da execucao do agente
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440040
       responses:
         "200":
           description: Detalhes da execucao
@@ -1793,6 +1947,8 @@ paths:
       tags:
       - Devices
       summary: Listar dispositivos pareados e status online do usuario
+      description: Exibe dispositivos ativos ou revogados do usuario e indica presenca
+        com base no heartbeat.
       operationId: listDevices
       responses:
         "200":
@@ -1815,13 +1971,17 @@ paths:
       tags:
       - Conversations
       summary: Consultar historico completo de mensagens e geracoes de uma conversa
+      description: "Retorna metadados da conversa, mensagens ordenadas por sequencia\
+        \ e geracoes registradas."
       operationId: getConversationHistory
       parameters:
       - name: conversationId
         in: path
+        description: Identificador UUID da conversa
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440020
       responses:
         "200":
           description: Historico retornado
@@ -1897,6 +2057,8 @@ paths:
       tags:
       - Admin Usage
       summary: Consultar consumo agregado diario da plataforma
+      description: Retorna total de tokens e requisicoes executados na janela diaria
+        UTC atual.
       operationId: getAdminUsageOverview
       responses:
         "200":
@@ -1925,18 +2087,23 @@ paths:
       tags:
       - Knowledge RAG
       summary: Excluir fonte de conhecimento e seus vetores
+      description: Remove a fonte e todos os chunks vetoriais correspondentes no pgvector.
       operationId: deleteKnowledgeSource
       parameters:
       - name: projectId
         in: path
+        description: Identificador UUID do projeto
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440010
       - name: sourceId
         in: path
+        description: Identificador UUID da fonte de conhecimento
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440030
       responses:
         "204":
           description: Fonte e vetores removidos
@@ -1964,9 +2131,11 @@ paths:
       parameters:
       - name: sessionId
         in: path
+        description: Identificador UUID da sessao a revogar
         required: true
         schema:
           type: string
+        example: 550e8400-e29b-41d4-a716-446655440002
       responses:
         "204":
           description: Sessao revogada
@@ -1989,39 +2158,58 @@ components:
   schemas:
     UpdateUserQuotaRequest:
       type: object
+      description: Configuracao de cotas diarias e concorrencia de inferencia de um
+        usuario
       properties:
         dailyTokenLimit:
           type: integer
           format: int64
+          description: Limite diario de tokens (entrada + saida)
+          example: 500000
           maximum: 100000000
           minimum: 1
         dailyRequestLimit:
           type: integer
           format: int32
+          description: Limite diario de requisicoes de chat/agente
+          example: 300
           maximum: 100000
           minimum: 1
         maxConcurrentGenerations:
           type: integer
           format: int32
+          description: Maximo de geracoes simultaneas permitidas
+          example: 3
           maximum: 50
           minimum: 1
     UserQuotaResponse:
       type: object
+      description: Cota vigente de consumo e concorrencia de um usuario
       properties:
         userId:
           type: string
+          description: Identificador do usuario
+          example: 550e8400-e29b-41d4-a716-446655440001
         dailyTokenLimit:
           type: integer
           format: int64
+          description: Limite diario de tokens
+          example: 500000
         dailyRequestLimit:
           type: integer
           format: int32
+          description: Limite diario de requisicoes
+          example: 300
         maxConcurrentGenerations:
           type: integer
           format: int32
+          description: Maximo de geracoes simultaneas
+          example: 3
         updatedAt:
           type: string
           format: date-time
+          description: Instante UTC da ultima atualizacao da cota
+          example: 2026-11-22T16:00:00Z
     ProblemDetail:
       type: object
       properties:
@@ -2043,22 +2231,38 @@ components:
           additionalProperties: {}
     CreateRemoteTaskRequest:
       type: object
+      description: Payload para criar e enfileirar uma tarefa remota em um dispositivo
+        pareado
       properties:
         deviceId:
           type: string
+          description: Identificador do dispositivo de destino
+          example: 550e8400-e29b-41d4-a716-446655440050
           minLength: 1
         projectId:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Identificador opcional do projeto associado
+          example: 550e8400-e29b-41d4-a716-446655440010
         idempotencyKey:
           type: string
+          description: Chave opcional de idempotencia para evitar criacao duplicada
+            em retentativas
+          example: task-build-20261122-001
           maxLength: 120
           minLength: 0
         title:
           type: string
+          description: Titulo resumido da tarefa
+          example: Executar suite de testes Maven no projeto
           maxLength: 160
           minLength: 0
         instruction:
           type: string
+          description: Instrucao detalhada que o agente local ira executar no workspace
+          example: Rodar mvn -B test no repositorio creatingj-backend e reportar falhas
+            encontradas.
           maxLength: 4000
           minLength: 0
       required:
@@ -2067,96 +2271,186 @@ components:
       - title
     CreateRemoteTaskResponse:
       type: object
+      description: Resposta da criacao de tarefa remota indicando presenca do dispositivo
+        e deduplicacao
       properties:
         task:
           $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+          description: Resumo da tarefa criada ou deduplicada
         deviceOnline:
           type: boolean
+          description: Indica se o dispositivo de destino estava online no momento
+            do enfileiramento
+          example: true
         deduplicated:
           type: boolean
+          description: Indica se a requisicao reutilizou uma tarefa existente pela
+            idempotencyKey
+          example: false
     RemoteTaskSummaryResponse:
       type: object
+      description: Resumo de estado e ciclo de vida de uma tarefa remota
       properties:
         id:
           type: string
+          description: Identificador da tarefa
+          example: 550e8400-e29b-41d4-a716-446655440060
         projectId:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Identificador do projeto associado (opcional)
+          example: 550e8400-e29b-41d4-a716-446655440010
         deviceId:
           type: string
+          description: Identificador do dispositivo executor
+          example: 550e8400-e29b-41d4-a716-446655440050
         title:
           type: string
+          description: Titulo da tarefa
+          example: Executar suite de testes Maven no projeto
         instruction:
           type: string
+          description: Instrucao completa da tarefa
+          example: Rodar mvn -B test no repositorio creatingj-backend e reportar falhas
+            encontradas.
         status:
           type: string
+          description: "Estado atual (QUEUED, RUNNING, WAITING_APPROVAL, COMPLETED,\
+            \ FAILED, CANCELLED)"
+          example: RUNNING
         leaseExpiresAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC de expiracao do lease atual do runner
+          example: 2026-11-22T18:25:00Z
         resultSummary:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Resumo final reportado pelo runner ao concluir
+          example: 106 testes executados com 0 falhas.
         errorCode:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Codigo de erro quando status for FAILED
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:20:00Z
         updatedAt:
           type: string
           format: date-time
+          description: Instante UTC da ultima atualizacao
+          example: 2026-11-22T18:21:00Z
         completedAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC de conclusao (nulo enquanto em execucao)
     ToolApprovalDecisionRequest:
       type: object
+      description: Decisao humana de uso unico sobre um pedido de aprovacao de ferramenta
+        da tarefa remota
       properties:
         action:
           type: string
+          description: Acao aplicada ao pedido (APPROVE ou REJECT)
           enum:
           - APPROVE
           - REJECT
+          example: APPROVE
       required:
       - action
     ToolApprovalDecisionResponse:
       type: object
+      description: Estado atualizado da tarefa e do pedido de aprovacao apos decisao
+        do usuario
       properties:
         task:
           $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+          description: Resumo atualizado da tarefa remota
         approval:
           $ref: "#/components/schemas/ToolApprovalResponse"
+          description: Pedido de aprovacao com decisao registrada
     ToolApprovalResponse:
       type: object
+      description: Pedido temporario de aprovacao de ferramenta submetido pelo runner
+        durante uma tarefa remota
       properties:
         id:
           type: string
+          description: Identificador do pedido de aprovacao
+          example: 550e8400-e29b-41d4-a716-446655440062
         taskId:
           type: string
+          description: Identificador da tarefa associada
+          example: 550e8400-e29b-41d4-a716-446655440060
         toolName:
           type: string
+          description: Nome da ferramenta solicitada
+          example: run_command
         targetPath:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Caminho relativo alvo no workspace
+          example: src/main/java/io/github/jvpgjava/creatingj/bootstrap/config/OpenApiConfig.java
         commandText:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Comando solicitado para execucao local
+          example: mvn -B test
         diffPreview:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Pre-visualizacao do diff ou alteracao proposta
+          example: |-
+            --- a/pom.xml
+            +++ b/pom.xml
         status:
           type: string
+          description: "Estado do pedido (PENDING, APPROVED, REJECTED, EXPIRED, DENIED_BY_POLICY)"
+          example: PENDING
         expiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do pedido
+          example: 2026-11-22T18:24:00Z
         decidedAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC da decisao humana (nulo enquanto pendente)
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao do pedido
+          example: 2026-11-22T18:21:00Z
     RunnerTaskEventRequest:
       type: object
+      description: Evento incremental de progresso reportado pelo runner com deduplicacao
+        por eventKey
       properties:
         eventKey:
           type: string
+          description: Chave unica do evento dentro da tarefa para evitar duplicidade
+            em retentativas
+          example: step-01-compile-ok
           maxLength: 120
           minLength: 0
         message:
           type: string
+          description: Mensagem de progresso visivel para o usuario no dashboard/SSE
+          example: Compilacao concluida sem erros; iniciando execucao dos testes unitarios.
           maxLength: 1000
           minLength: 0
       required:
@@ -2164,156 +2458,266 @@ components:
       - message
     RunnerTaskEventResponse:
       type: object
+      description: Confirmacao de persistencia de evento do runner com indicador de
+        deduplicacao
       properties:
         event:
           $ref: "#/components/schemas/TaskEventResponse"
+          description: Evento persistido ou recuperado por eventKey
         deduplicated:
           type: boolean
+          description: Indica se o evento ja havia sido recebido anteriormente com
+            a mesma eventKey
+          example: false
     TaskEventResponse:
       type: object
+      description: Evento registrado na linha do tempo de execucao de uma tarefa remota
       properties:
         id:
           type: string
+          description: Identificador do evento
+          example: 550e8400-e29b-41d4-a716-446655440061
         eventKey:
           type: string
+          description: Chave de deduplicacao do evento
+          example: step-01-compile-ok
         eventType:
           type: string
+          description: "Tipo do evento (PROGRESS, APPROVAL_REQUESTED, APPROVAL_DECIDED,\
+            \ COMPLETED, FAILED)"
+          example: PROGRESS
         message:
           type: string
+          description: Descricao do evento
+          example: Compilacao concluida sem erros; iniciando execucao dos testes unitarios.
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de registro
+          example: 2026-11-22T18:21:05Z
     RunnerCompleteTaskRequest:
       type: object
+      description: Payload enviado pelo runner para finalizar uma tarefa com sucesso
+        ou falha
       properties:
         succeeded:
           type: boolean
+          description: Indica se a tarefa foi concluida com sucesso (true) ou falhou
+            (false)
+          example: true
         resultSummary:
           type: string
+          description: Resumo estruturado do resultado da execucao
+          example: "Suite Maven concluida com sucesso: 106 testes aprovados em 14s."
           maxLength: 4000
           minLength: 0
         errorCode:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Codigo de erro opcional quando succeeded for false
           maxLength: 64
           minLength: 0
     RunnerApprovalRequest:
       type: object
+      description: Pedido enviado pelo runner para obter aprovacao humana temporaria
+        antes de executar ferramenta
       properties:
         toolName:
           type: string
+          description: Nome da ferramenta que o runner deseja executar
+          example: run_command
           maxLength: 40
           minLength: 0
         targetPath:
           type: string
+          description: Caminho relativo alvo no workspace (quando aplicavel)
+          example: src/main/java/io/github/jvpgjava/creatingj/bootstrap/config/OpenApiConfig.java
           maxLength: 260
           minLength: 0
         commandText:
           type: string
+          description: Comando proposto para execucao local
+          example: mvn -B test
           maxLength: 1000
           minLength: 0
         diffPreview:
           type: string
+          description: Pre-visualizacao do diff ou impacto esperado
+          example: |-
+            --- a/pom.xml
+            +++ b/pom.xml
+            @@ -10,1 +10,1 @@
           maxLength: 8000
           minLength: 0
         ttlSeconds:
           type: integer
           format: int32
+          description: Tempo de expiracao do pedido em segundos (30..600)
+          example: 180
           maximum: 600
           minimum: 30
       required:
       - toolName
     RunnerLeaseResponse:
       type: object
+      description: Resposta do pedido de lease de proxima tarefa pendente para o dispositivo
       properties:
         assigned:
           type: boolean
+          description: Indica se havia tarefa disponivel e atribuida ao runner
+          example: true
         task:
+          type: "null"
           $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+          description: Dados da tarefa atribuida (nulo quando assigned for false)
     CompletePairingRequest:
       type: object
+      description: Payload enviado pelo agente local para concluir o pareamento com
+        codigo de uso unico
       properties:
         pairingCode:
           type: string
+          description: Codigo de pareamento temporario exibido ao usuario ao criar
+            o desafio
+          example: crj_pair_9f4c2a1b8e7d6c5a4b3c2d1e0f9a8b7c
           maxLength: 200
           minLength: 0
       required:
       - pairingCode
     CompletePairingResponse:
       type: object
+      description: Resposta do pareamento concluido com a credencial exclusiva do
+        runner (exibida uma vez)
       properties:
         device:
           $ref: "#/components/schemas/DeviceSummaryResponse"
+          description: Dados do dispositivo recem-pareado
         deviceToken:
           type: string
+          description: Token opaco X-Device-Token exclusivo para rotas /api/v1/runner/**
+          example: crj_dev_7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d
     DeviceSummaryResponse:
       type: object
+      description: Resumo de estado e conectividade de um dispositivo pareado
       properties:
         id:
           type: string
+          description: Identificador do dispositivo
+          example: 550e8400-e29b-41d4-a716-446655440050
         name:
           type: string
+          description: Nome amigavel do dispositivo
+          example: Workstation-Joao-Windows
         platform:
           type: string
+          description: "Sistema operacional (LINUX, WINDOWS, MACOS)"
+          example: WINDOWS
         status:
           type: string
+          description: "Estado cadastral (ACTIVE, REVOKED)"
+          example: ACTIVE
         online:
           type: boolean
+          description: Indica se houve heartbeat recente dentro da janela de presenca
+          example: true
         lastHeartbeatAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC do ultimo heartbeat recebido
+          example: 2026-11-22T18:20:00Z
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de pareamento
+          example: 2026-11-22T18:00:00Z
         revokedAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC de revogacao (nulo enquanto ativo)
     CreateProjectRequest:
       type: object
+      description: Payload para criacao de um novo projeto do usuario
       properties:
         name:
           type: string
+          description: Nome legivel do projeto
+          example: CreatingJ Backend
           maxLength: 120
           minLength: 0
         slug:
           type: string
+          description: Slug opcional em kebab-case (gerado automaticamente se omitido)
+          example: creatingj-backend
           maxLength: 120
           minLength: 0
         description:
           type: string
+          description: Descricao resumida do escopo do projeto
+          example: "API hexagonal Java 25 com Spring Boot 4, pgvector e orquestracao\
+            \ de agentes"
           maxLength: 500
           minLength: 0
       required:
       - name
     ProjectResponse:
       type: object
+      description: Dados completos de um projeto
       properties:
         id:
           type: string
+          description: Identificador unico do projeto
+          example: 550e8400-e29b-41d4-a716-446655440010
         name:
           type: string
+          description: Nome do projeto
+          example: CreatingJ Backend
         slug:
           type: string
+          description: Slug unico do projeto no escopo do proprietario
+          example: creatingj-backend
         description:
           type: string
+          description: Descricao do projeto
+          example: "API hexagonal Java 25 com Spring Boot 4, pgvector e orquestracao\
+            \ de agentes"
         createdAt:
           type: string
           format: date-time
+          description: Data de criacao em UTC
+          example: 2026-11-22T14:30:00Z
         updatedAt:
           type: string
           format: date-time
+          description: Data da ultima atualizacao em UTC
+          example: 2026-11-22T15:00:00Z
     IngestKnowledgeSourceRequest:
       type: object
+      description: Payload para ingestao ou atualizacao de uma fonte de conhecimento
+        do projeto
       properties:
         sourcePath:
           type: string
+          description: Caminho relativo seguro dentro do projeto (arquivos sensiveis
+            como .env sao bloqueados)
+          example: docs/arquitetura-auth.md
           maxLength: 260
           minLength: 0
         title:
           type: string
+          description: Titulo descritivo da fonte
+          example: Arquitetura de Autenticacao
           maxLength: 160
           minLength: 0
         content:
           type: string
+          description: Conteudo textual a ser dividido em chunks e indexado no pgvector
+          example: A autenticacao web utiliza cookie HttpOnly CREATINGJ_SESSION com
+            CSRF X-XSRF-TOKEN.
           maxLength: 100000
           minLength: 0
       required:
@@ -2321,152 +2725,257 @@ components:
       - sourcePath
     IngestKnowledgeSourceResponse:
       type: object
+      description: Resultado da ingestao de uma fonte de conhecimento e respectivo
+        job de indexacao
       properties:
         source:
           $ref: "#/components/schemas/KnowledgeSourceResponse"
+          description: Metadados da fonte indexada
         job:
           $ref: "#/components/schemas/KnowledgeIndexJobResponse"
+          description: Job de indexacao registrado para auditoria
         deduplicated:
           type: boolean
+          description: Indica se o conteudo era identico ao hash atual e foi deduplicado
+            sem reembedding
+          example: false
     KnowledgeIndexJobResponse:
       type: object
+      description: Registro persistido de execucao de job de indexacao ou reindexacao
+        vetorial
       properties:
         id:
           type: string
+          description: Identificador do job
+          example: 550e8400-e29b-41d4-a716-446655440031
         projectId:
           type: string
+          description: Identificador do projeto
+          example: 550e8400-e29b-41d4-a716-446655440010
         sourceId:
           type: string
+          description: Identificador da fonte indexada
+          example: 550e8400-e29b-41d4-a716-446655440030
         sourcePath:
           type: string
+          description: Caminho relativo da fonte
+          example: docs/arquitetura-auth.md
         operation:
           type: string
+          description: "Operacao executada (INGEST, REINDEX, DELETE)"
+          example: INGEST
         status:
           type: string
+          description: "Status do job (COMPLETED, DEDUPLICATED, FAILED)"
+          example: COMPLETED
         chunksIndexed:
           type: integer
           format: int32
+          description: Quantidade de chunks vetorizados gravados no pgvector
+          example: 4
         errorCode:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Codigo de erro quando status for FAILED (nulo em sucesso)
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao do job
+          example: 2026-11-22T18:10:00Z
         completedAt:
           type: string
           format: date-time
+          description: Instante UTC de conclusao do job
+          example: 2026-11-22T18:10:01Z
     KnowledgeSourceResponse:
       type: object
+      description: Metadados de uma fonte de conhecimento indexada no projeto
       properties:
         id:
           type: string
+          description: Identificador da fonte
+          example: 550e8400-e29b-41d4-a716-446655440030
         projectId:
           type: string
+          description: Identificador do projeto
+          example: 550e8400-e29b-41d4-a716-446655440010
         sourcePath:
           type: string
+          description: Caminho relativo da fonte no projeto
+          example: docs/arquitetura-auth.md
         title:
           type: string
+          description: Titulo da fonte
+          example: Arquitetura de Autenticacao
         contentHash:
           type: string
+          description: Hash SHA-256 do conteudo para deduplicacao
+          example: 8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4
         embeddingVersion:
           type: string
+          description: Versao do embedding aplicada aos chunks atuais
+          example: onnx:multilingual-e5-base-q8:768
         status:
           type: string
+          description: "Estado atual da fonte (INDEXED, FAILED)"
+          example: INDEXED
         chunkCount:
           type: integer
           format: int32
+          description: Quantidade de chunks ativos no pgvector
+          example: 4
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:10:00Z
         updatedAt:
           type: string
           format: date-time
+          description: Instante UTC da ultima reindexacao
+          example: 2026-11-22T18:10:01Z
     KnowledgeSearchRequest:
       type: object
+      description: Parametros para busca semantica RAG no indice vetorial do projeto
       properties:
         query:
           type: string
+          description: Consulta em linguagem natural para busca semantica
+          example: Como funciona a protecao CSRF e cookie de sessao no login web?
           maxLength: 2000
           minLength: 0
         topK:
           type: integer
           format: int32
+          description: "Quantidade maxima de trechos retornados (padrao 5, intervalo\
+            \ 1..20)"
+          example: 5
           maximum: 20
           minimum: 1
         minScore:
           type: number
           format: double
+          description: Pontuacao minima de similaridade de cosseno (-1.0 a 1.0)
+          example: 0.35
           maximum: 1.0
           minimum: -1.0
       required:
       - query
     KnowledgeSearchMatchResponse:
       type: object
+      description: Trecho recuperado por similaridade vetorial com citacao da fonte
+        original
       properties:
         sourceId:
           type: string
+          description: Identificador da fonte
+          example: 550e8400-e29b-41d4-a716-446655440030
         sourcePath:
           type: string
+          description: Caminho relativo da fonte
+          example: docs/arquitetura-auth.md
         title:
           type: string
+          description: Titulo da fonte
+          example: Arquitetura de Autenticacao
         chunkIndex:
           type: integer
           format: int32
+          description: Indice sequencial do chunk dentro da fonte
+          example: 0
         excerpt:
           type: string
+          description: Trecho textual retornado para composicao de contexto RAG
+          example: A autenticacao web utiliza cookie HttpOnly CREATINGJ_SESSION com
+            CSRF X-XSRF-TOKEN.
         score:
           type: number
           format: double
+          description: Similaridade de cosseno calculada pelo pgvector (entre -1.0
+            e 1.0)
+          example: 0.842
         embeddingVersion:
           type: string
+          description: Versao do modelo de embedding que gerou o vetor
+          example: onnx:multilingual-e5-base-q8:768
     KnowledgeSearchResponse:
       type: object
+      description: Resultado da busca vetorial RAG filtrada por proprietario e projeto
       properties:
         projectId:
           type: string
+          description: Identificador do projeto pesquisado
+          example: 550e8400-e29b-41d4-a716-446655440010
         embeddingVersion:
           type: string
+          description: Versao do modelo de embedding utilizada na busca
+          example: onnx:multilingual-e5-base-q8:768
         latencyMs:
           type: integer
           format: int64
+          description: Latencia total da busca vetorial em milissegundos
+          example: 18
         matches:
           type: array
+          description: Trechos mais relevantes ordenados por similaridade decrescente
           items:
             $ref: "#/components/schemas/KnowledgeSearchMatchResponse"
     CreateAgentRunRequest:
       type: object
+      description: Payload para iniciar uma execucao de planejamento do agente no
+        projeto
       properties:
         goal:
           type: string
+          description: Objetivo claro que o agente deve planejar para o cliente executar
+          example: Revisar a configuracao de CORS e propor um teste unitario para
+            origens invalidas
           maxLength: 2000
           minLength: 0
         modelId:
           type: string
+          description: Modelo opcional para sobrescrever o padrao do provedor
+          example: z-ai/glm-5.3-flash
           maxLength: 120
           minLength: 0
         workspaceFiles:
           type: array
+          description: Snapshots de arquivos do workspace do cliente (ate 10 arquivos;
+            caminhos sensiveis sao bloqueados)
           items:
             $ref: "#/components/schemas/WorkspaceFileSnapshotRequest"
           maxItems: 10
           minItems: 0
         includeProjectRag:
           type: boolean
+          description: Indica se o backend deve enriquecer o contexto com busca RAG
+            do projeto
+          example: true
         ragTopK:
           type: integer
           format: int32
+          description: Quantidade maxima de trechos RAG injetados (1..10)
+          example: 3
           maximum: 10
           minimum: 1
       required:
       - goal
     WorkspaceFileSnapshotRequest:
       type: object
+      description: Snapshot textual de um arquivo do workspace enviado pelo cliente
+        como contexto
       properties:
         relativePath:
           type: string
+          description: Caminho relativo seguro dentro do repositorio
+          example: src/main/java/io/github/jvpgjava/creatingj/bootstrap/config/security/CorsProperties.java
           maxLength: 260
           minLength: 0
         content:
           type: string
+          description: Conteudo textual do arquivo (sem segredos ou credenciais)
+          example: "public record CorsProperties(List<String> allowedOrigins) {}"
           maxLength: 12000
           minLength: 0
       required:
@@ -2474,212 +2983,357 @@ components:
       - relativePath
     AgentRunDetailResponse:
       type: object
+      description: Detalhes completos de uma execucao do agente e suas propostas de
+        ferramentas
       properties:
         run:
           $ref: "#/components/schemas/AgentRunSummaryResponse"
+          description: Resumo da execucao do agente
         proposals:
           type: array
+          description: Propostas de acoes/ferramentas avaliadas pela politica deterministica
+            de seguranca
           items:
             $ref: "#/components/schemas/AgentToolProposalResponse"
     AgentRunSummaryResponse:
       type: object
+      description: Resumo de uma execucao de planejamento do agente
       properties:
         id:
           type: string
+          description: Identificador da execucao do agente
+          example: 550e8400-e29b-41d4-a716-446655440040
         projectId:
           type: string
+          description: Identificador do projeto associado
+          example: 550e8400-e29b-41d4-a716-446655440010
         goal:
           type: string
+          description: Objetivo solicitado pelo usuario
+          example: Revisar a configuracao de CORS e propor teste unitario
         modelId:
           type: string
+          description: Modelo de IA utilizado no planejamento
+          example: z-ai/glm-5.3-flash
         planSummary:
           type: string
+          description: Resumo estruturado do plano gerado pelo modelo
+          example: Ler SecurityConfig.java e propor suite de validacao de origens
+            permitidas
         status:
           type: string
+          description: "Estado atual (AWAITING_APPROVAL, READY_FOR_CLIENT, CANCELLED,\
+            \ FAILED)"
+          example: AWAITING_APPROVAL
         workspaceFileCount:
           type: integer
           format: int32
+          description: Quantidade de snapshots de arquivos enviados pelo cliente
+          example: 1
         ragMatchCount:
           type: integer
           format: int32
+          description: Quantidade de trechos RAG recuperados do projeto
+          example: 2
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:15:00Z
         updatedAt:
           type: string
           format: date-time
+          description: Instante UTC da ultima atualizacao
+          example: 2026-11-22T18:15:02Z
     AgentToolProposalResponse:
       type: object
+      description: Proposta individual de uso de ferramenta planejada pelo agente
       properties:
         id:
           type: string
+          description: Identificador da proposta
+          example: 550e8400-e29b-41d4-a716-446655440041
         stepIndex:
           type: integer
           format: int32
+          description: Ordem sequencial do passo no plano
+          example: 1
         toolName:
           type: string
+          description: "Nome da ferramenta proposta (read_file, write_file, run_command,\
+            \ etc.)"
+          example: write_file
         targetPath:
           type: string
+          description: Caminho relativo alvo no workspace do cliente
+          example: src/test/java/io/github/jvpgjava/creatingj/web/CorsPolicyTest.java
         commandText:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Comando sugerido quando a ferramenta for de execucao (nulo
+            para leitura/escrita)
+          example: mvn -B test -Dtest=CorsPolicyTest
         rationale:
           type: string
+          description: Justificativa gerada pelo modelo para a proposta
+          example: Garantir que origens nao autorizadas sejam bloqueadas pelo filtro
+            CORS
         policyDecision:
           type: string
+          description: "Veredito da politica deterministica (ALLOW, REQUIRE_APPROVAL,\
+            \ DENY)"
+          example: REQUIRE_APPROVAL
         policyReason:
           type: string
+          description: Motivo tecnico da classificacao de politica
+          example: Escrita de arquivo no workspace exige aprovacao explicita do usuario
         approvalStatus:
           type: string
+          description: "Estado da aprovacao (AUTO_APPROVED, PENDING, APPROVED, REJECTED,\
+            \ DENIED_BY_POLICY)"
+          example: PENDING
         decidedAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC da decisao humana (nulo enquanto pendente)
+          example: 2026-11-22T18:16:00Z
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao da proposta
+          example: 2026-11-22T18:15:02Z
     ToolProposalDecisionRequest:
       type: object
+      description: Decisao humana sobre uma proposta de ferramenta pendente de aprovacao
       properties:
         action:
           type: string
+          description: Acao aplicada a proposta (APPROVE ou REJECT)
           enum:
           - APPROVE
           - REJECT
+          example: APPROVE
       required:
       - action
     ToolProposalDecisionResponse:
       type: object
+      description: Estado atualizado da execucao e da proposta apos decisao de aprovacao
+        ou rejeicao
       properties:
         run:
           $ref: "#/components/schemas/AgentRunSummaryResponse"
+          description: Resumo atualizado da execucao do agente
         proposal:
           $ref: "#/components/schemas/AgentToolProposalResponse"
+          description: Proposta com status de aprovacao atualizado
     CreatePairingChallengeRequest:
       type: object
+      description: Payload para gerar um codigo de pareamento temporario para um novo
+        dispositivo
       properties:
         deviceName:
           type: string
+          description: Nome amigavel da maquina onde o agente local ira rodar
+          example: Workstation-Joao-Windows
           maxLength: 120
           minLength: 0
         platform:
           type: string
+          description: "Sistema operacional do dispositivo (LINUX, WINDOWS, MACOS)"
           enum:
           - LINUX
           - WINDOWS
           - MACOS
+          example: WINDOWS
       required:
       - deviceName
       - platform
     PairingChallengeResponse:
       type: object
+      description: Desafio temporario de pareamento com codigo de uso unico
       properties:
         challengeId:
           type: string
+          description: Identificador do desafio
+          example: 550e8400-e29b-41d4-a716-446655440051
         pairingCode:
           type: string
+          description: Codigo de uso unico a ser inserido no agente local
+          example: crj_pair_9f4c2a1b8e7d6c5a4b3c2d1e0f9a8b7c
         deviceName:
           type: string
+          description: Nome do dispositivo associado ao desafio
+          example: Workstation-Joao-Windows
         platform:
           type: string
+          description: "Plataforma do dispositivo (LINUX, WINDOWS, MACOS)"
+          example: WINDOWS
         expiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do codigo
+          example: 2026-11-22T18:10:00Z
     CreateConversationRequest:
       type: object
+      description: Payload para criacao de uma nova conversa de chat
       properties:
         title:
           type: string
+          description: Titulo inicial da conversa
+          example: Revisao de seguranca do backend
           maxLength: 160
           minLength: 0
         modelId:
           type: string
+          description: "Modelo opcional (quando omitido, utiliza o modelo padrao do\
+            \ provedor)"
+          example: z-ai/glm-5.3-flash
           maxLength: 120
           minLength: 0
       required:
       - title
     ConversationSummaryResponse:
       type: object
+      description: Resumo de uma conversa de chat
       properties:
         id:
           type: string
+          description: Identificador da conversa
+          example: 550e8400-e29b-41d4-a716-446655440020
         title:
           type: string
+          description: Titulo da conversa
+          example: Duvidas sobre arquitetura hexagonal
         modelId:
           type: string
+          description: Modelo de IA configurado para a conversa
+          example: z-ai/glm-5.3-flash
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:00:00Z
         updatedAt:
           type: string
           format: date-time
+          description: Instante UTC da ultima interacao
+          example: 2026-11-22T18:05:12Z
     SendMessageRequest:
       type: object
+      description: Payload para envio de uma mensagem de usuario na conversa
       properties:
         content:
           type: string
+          description: Texto da mensagem a ser enviada ao modelo
+          example: Quais camadas fazem parte do monÃ³lito modular hexagonal do CreatingJ?
           maxLength: 16000
           minLength: 0
       required:
       - content
     GenerationSummaryResponse:
       type: object
+      description: Metadados e consumo de tokens de uma geracao de resposta
       properties:
         id:
           type: string
+          description: Identificador da geracao
+          example: 550e8400-e29b-41d4-a716-446655440021
         modelId:
           type: string
+          description: Modelo utilizado
+          example: z-ai/glm-5.3-flash
         status:
           type: string
+          description: "Estado da geracao (RUNNING, COMPLETED, CANCELLED, FAILED)"
+          example: COMPLETED
         promptTokens:
           type: integer
           format: int32
+          description: Tokens consumidos no prompt
+          example: 120
         completionTokens:
           type: integer
           format: int32
+          description: Tokens gerados na resposta
+          example: 185
         totalTokens:
           type: integer
           format: int32
+          description: Total de tokens da geracao
+          example: 305
         errorCode:
-          type: string
+          type:
+          - string
+          - "null"
+          description: Codigo de erro quando status for FAILED (nulo em sucesso)
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de inicio
+          example: 2026-11-22T18:05:10Z
         completedAt:
           type: string
           format: date-time
+          description: Instante UTC de conclusao
+          example: 2026-11-22T18:05:12Z
     MessageExchangeResponse:
       type: object
+      description: Resultado sincrono do envio de mensagem com a resposta do assistente
+        e a geracao
       properties:
         userMessage:
           $ref: "#/components/schemas/MessageResponse"
+          description: Mensagem persistida do usuario
         assistantMessage:
           $ref: "#/components/schemas/MessageResponse"
+          description: Resposta persistida do assistente
         generation:
           $ref: "#/components/schemas/GenerationSummaryResponse"
+          description: Metadados e contagem de tokens da geracao
     MessageResponse:
       type: object
+      description: Mensagem persistida no historico da conversa
       properties:
         id:
           type: string
+          description: Identificador da mensagem
+          example: 550e8400-e29b-41d4-a716-446655440022
         role:
           type: string
+          description: Papel do autor (USER ou ASSISTANT)
+          example: USER
         content:
           type: string
+          description: Conteudo textual da mensagem
+          example: Explique como funciona a arquitetura hexagonal no backend CreatingJ.
         sequenceNum:
           type: integer
           format: int32
+          description: Numero de sequencia crescente na conversa
+          example: 1
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:05:10Z
     LoginRequest:
       type: object
+      description: Credenciais de login por e-mail e senha
       properties:
         email:
           type: string
           format: email
+          description: E-mail cadastrado do usuario ativo
+          example: joao@creatingj.dev
           maxLength: 254
           minLength: 0
         password:
           type: string
+          description: Senha do usuario
+          example: CriarJ@2026#Forte
           maxLength: 128
           minLength: 0
       required:
@@ -2687,69 +3341,113 @@ components:
       - password
     WebLoginResponse:
       type: object
+      description: Resposta do login web apos emitir os cookies CREATINGJ_SESSION
+        (HttpOnly) e XSRF-TOKEN
       properties:
         userId:
           type: string
+          description: Identificador do usuario autenticado
+          example: 550e8400-e29b-41d4-a716-446655440001
         email:
           type: string
+          description: E-mail do usuario autenticado
+          example: joao@creatingj.dev
         roles:
           type: array
+          description: Papeis concedidos ao usuario
+          example:
+          - MEMBER
           items:
             type: string
           uniqueItems: true
         sessionExpiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao da sessao web
+          example: 2026-11-23T06:00:00Z
     RefreshTokenRequest:
       type: object
+      description: Payload para rotacionar um refresh token valido (reuso revoga toda
+        a familia de sessoes)
       properties:
         refreshToken:
           type: string
+          description: Refresh token opaco vigente
+          example: crj_ref_9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d
           maxLength: 256
           minLength: 0
       required:
       - refreshToken
     TokenPairResponse:
       type: object
+      description: Par de tokens emitido via PKCE ou rotacao de refresh token
       properties:
         accessToken:
           type: string
+          description: Access token opaco de curta duracao
+          example: crj_tok_8f9e0a1b2c3d4e5f6a7b8c9d0e1f2a3b
         tokenType:
           type: string
+          description: Tipo do token
+          example: Bearer
         accessTokenExpiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do access token
+          example: 2026-11-22T18:15:00Z
         refreshToken:
           type: string
+          description: Refresh token opaco com rotacao obrigatoria a cada uso
+          example: crj_ref_9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d
         refreshTokenExpiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do refresh token
+          example: 2026-12-22T18:00:00Z
         userId:
           type: string
+          description: Identificador do usuario
+          example: 550e8400-e29b-41d4-a716-446655440001
         email:
           type: string
+          description: E-mail do usuario
+          example: joao@creatingj.dev
         roles:
           type: array
+          description: Papeis do usuario
+          example:
+          - MEMBER
           items:
             type: string
           uniqueItems: true
     PkceTokenRequest:
       type: object
+      description: Payload para trocar codigo PKCE + codeVerifier por access token
+        e refresh token
       properties:
         code:
           type: string
+          description: Codigo de autorizacao recebido em /api/v1/auth/pkce/authorize
+          example: crj_code_3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c
           maxLength: 256
           minLength: 0
         clientId:
           type: string
+          description: Identificador do mesmo cliente usado na autorizacao
+          example: creatingj-desktop
           maxLength: 64
           minLength: 0
         redirectUri:
           type: string
+          description: Mesma redirectUri informada na autorizacao
+          example: creatingj://auth/callback
           maxLength: 512
           minLength: 0
         codeVerifier:
           type: string
+          description: Segredo original gerado pelo cliente cujo SHA-256 Base64URL
+            corresponde ao challenge
+          example: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
           maxLength: 128
           minLength: 43
       required:
@@ -2759,25 +3457,38 @@ components:
       - redirectUri
     PkceAuthorizeRequest:
       type: object
+      description: Solicitacao de codigo de autorizacao OAuth 2.0 com PKCE (S256)
+        para clientes nativos
       properties:
         clientId:
           type: string
+          description: "Identificador do cliente permitido (creatingj-desktop, creatingj-vscode,\
+            \ creatingj-mobile)"
+          example: creatingj-desktop
           maxLength: 64
           minLength: 0
         redirectUri:
           type: string
+          description: URI de redirecionamento registrada para o cliente
+          example: creatingj://auth/callback
           maxLength: 512
           minLength: 0
         codeChallenge:
           type: string
+          description: Hash SHA-256 em Base64URL do codeVerifier (43..128 caracteres)
+          example: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
           maxLength: 128
           minLength: 43
         codeChallengeMethod:
           type: string
+          description: Metodo de desafio PKCE (apenas S256 e aceito)
+          example: S256
           maxLength: 16
           minLength: 0
         state:
           type: string
+          description: Valor opaco opcional para correlacao anti-CSRF no cliente
+          example: state-8f2a1c9d
           maxLength: 256
           minLength: 0
       required:
@@ -2787,40 +3498,63 @@ components:
       - redirectUri
     PkceAuthorizeResponse:
       type: object
+      description: Codigo de autorizacao PKCE de uso unico emitido para troca por
+        par de tokens
       properties:
         authorizationCode:
           type: string
+          description: Codigo temporario de uso unico
+          example: crj_code_3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c
         redirectUri:
           type: string
+          description: URI de redirecionamento validada
+          example: creatingj://auth/callback
         state:
           type: string
+          description: Valor state devolvido sem modificacao
+          example: state-8f2a1c9d
         expiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do codigo
+          example: 2026-11-22T18:05:00Z
     PasswordResetRequest:
       type: object
+      description: Payload para solicitar redefinicao de senha sem enumeracao de contas
       properties:
         email:
           type: string
           format: email
+          description: E-mail da conta para solicitacao de reset
+          example: joao@creatingj.dev
           maxLength: 254
           minLength: 0
       required:
       - email
     PasswordResetRequestedResponse:
       type: object
+      description: Resposta generica da solicitacao de redefinicao de senha (anti-enumeracao)
       properties:
         message:
           type: string
+          description: Mensagem neutra confirmando o recebimento da solicitacao
+          example: "Se existir uma conta ativa para este e-mail, as instrucoes de\
+            \ redefinicao foram geradas."
     ConfirmPasswordResetRequest:
       type: object
+      description: Payload para concluir a redefinicao de senha usando token de uso
+        unico
       properties:
         token:
           type: string
+          description: Token de redefinicao de senha de uso unico
+          example: crj_rst_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d
           maxLength: 256
           minLength: 0
         newPassword:
           type: string
+          description: Nova senha forte (minimo 12 caracteres)
+          example: NovaSenha@2026#Segura
           maxLength: 128
           minLength: 12
       required:
@@ -2828,32 +3562,54 @@ components:
       - token
     LoginResponse:
       type: object
+      description: Resposta do login por bearer token com dados basicos do usuario
       properties:
         accessToken:
           type: string
+          description: "Token de acesso opaco para envio em Authorization: Bearer\
+            \ <token>"
+          example: crj_tok_8f9e0a1b2c3d4e5f6a7b8c9d0e1f2a3b
         tokenType:
           type: string
+          description: Tipo do token
+          example: Bearer
         expiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do token
+          example: 2026-11-23T06:00:00Z
         userId:
           type: string
+          description: Identificador do usuario
+          example: 550e8400-e29b-41d4-a716-446655440001
         email:
           type: string
+          description: E-mail autenticado
+          example: joao@creatingj.dev
         roles:
           type: array
+          description: Papeis atribuidos ao usuario
+          example:
+          - MEMBER
           items:
             type: string
           uniqueItems: true
     ActivateAccountRequest:
       type: object
+      description: Payload para ativacao inicial de conta gerenciada com definicao
+        de senha forte
       properties:
         token:
           type: string
+          description: Token de ativacao de uso unico emitido pelo administrador
+          example: crj_act_4f8e1a2b3c4d5e6f7a8b9c0d1e2f3a4b
           maxLength: 256
           minLength: 0
         password:
           type: string
+          description: "Senha forte (minimo 12 caracteres, com maiuscula, minuscula,\
+            \ numero e simbolo)"
+          example: CriarJ@2026#Forte
           maxLength: 128
           minLength: 12
       required:
@@ -2861,18 +3617,26 @@ components:
       - token
     CreateManagedUserRequest:
       type: object
+      description: Payload administrativo para criar um usuario gerenciado sem auto-registro
       properties:
         email:
           type: string
           format: email
+          description: E-mail corporativo ou pessoal unico do usuario
+          example: joao@creatingj.dev
           maxLength: 254
           minLength: 0
         displayName:
           type: string
+          description: Nome de exibicao do usuario
+          example: Joao Grando
           maxLength: 120
           minLength: 2
         roles:
           type: array
+          description: Papeis atribuidos (MEMBER ou ADMIN; padrao MEMBER se omitido)
+          example:
+          - MEMBER
           items:
             type: string
             enum:
@@ -2885,293 +3649,465 @@ components:
       - email
     CreatedManagedUserResponse:
       type: object
+      description: Resposta da criacao administrativa de usuario contendo o token
+        inicial de ativacao
       properties:
         user:
           $ref: "#/components/schemas/UserSummaryResponse"
+          description: Resumo do usuario provisionado
         activationToken:
           type: string
+          description: Token de ativacao de uso unico (retornado apenas na criacao)
+          example: crj_act_4f8e1a2b3c4d5e6f7a8b9c0d1e2f3a4b
         activationExpiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao do token de ativacao
+          example: 2026-11-23T18:00:00Z
     UserSummaryResponse:
       type: object
+      description: Resumo cadastral de um usuario gerenciado
       properties:
         id:
           type: string
+          description: Identificador do usuario
+          example: 550e8400-e29b-41d4-a716-446655440001
         email:
           type: string
+          description: E-mail do usuario
+          example: joao@creatingj.dev
         displayName:
           type: string
+          description: Nome de exibicao
+          example: Joao Grando
         status:
           type: string
+          description: "Estado da conta (PENDING_ACTIVATION, ACTIVE, SUSPENDED)"
+          example: ACTIVE
         roles:
           type: array
+          description: Papeis atribuidos
+          example:
+          - MEMBER
           items:
             type: string
           uniqueItems: true
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T14:00:00Z
         suspendedAt:
-          type: string
+          type:
+          - string
+          - "null"
           format: date-time
+          description: Instante UTC de suspensao (nulo quando nao suspenso)
     DataRetentionReportResponse:
       type: object
+      description: Relatorio da execucao da politica de retencao e expurgo de dados
       properties:
         executedAt:
           type: string
           format: date-time
+          description: Instante UTC da execucao
+          example: 2026-11-22T18:00:00Z
         deletedSessions:
           type: integer
           format: int32
+          description: Sessoes expiradas removidas
+          example: 12
         deletedPairingChallenges:
           type: integer
           format: int32
+          description: Desafios de pareamento expirados removidos
+          example: 3
         deletedCompletedTasks:
           type: integer
           format: int32
+          description: Tarefas concluidas antigas removidas
+          example: 8
         deletedArchivedConversations:
           type: integer
           format: int32
+          description: Conversas arquivadas antigas removidas
+          example: 4
         deletedAuditEvents:
           type: integer
           format: int32
+          description: Eventos de auditoria antigos removidos
+          example: 45
         totalDeleted:
           type: integer
           format: int32
+          description: Total de registros removidos na execucao
+          example: 72
     UsageRecordResponse:
       type: object
+      description: Registro individual de consumo de tokens e latencia de inferencia
       properties:
         id:
           type: string
+          description: Identificador do registro de uso
+          example: 550e8400-e29b-41d4-a716-446655440090
         conversationId:
           type: string
+          description: Identificador da conversa associada (quando aplicavel)
+          example: 550e8400-e29b-41d4-a716-446655440020
         generationId:
           type: string
+          description: Identificador da geracao associada (quando aplicavel)
+          example: 550e8400-e29b-41d4-a716-446655440021
         modelId:
           type: string
+          description: Modelo utilizado pelo provedor
+          example: z-ai/glm-5.3-flash
         source:
           type: string
+          description: "Origem da chamada (CHAT_SYNC, CHAT_STREAM, AGENT_PLAN)"
+          example: CHAT_SYNC
         promptTokens:
           type: integer
           format: int32
+          description: Tokens enviados no prompt
+          example: 180
         completionTokens:
           type: integer
           format: int32
+          description: Tokens gerados na resposta
+          example: 125
         totalTokens:
           type: integer
           format: int32
+          description: Total de tokens contabilizados
+          example: 305
         estimated:
           type: boolean
+          description: Indica se a contagem foi estimada localmente na ausencia de
+            metadados do provedor
+          example: false
         latencyMs:
           type: integer
           format: int64
+          description: Latencia total da chamada ao provedor em milissegundos
+          example: 842
         outcome:
           type: string
+          description: "Resultado final da chamada (COMPLETED, CANCELLED, FAILED)"
+          example: COMPLETED
         recordedAt:
           type: string
           format: date-time
+          description: Instante UTC de gravacao do registro
+          example: 2026-11-22T18:05:12Z
     UsageSummaryResponse:
       type: object
+      description: "Resumo diario de consumo, saldo restante e historico recente do\
+        \ usuario"
       properties:
         windowStart:
           type: string
           format: date-time
+          description: Inicio da janela diaria em UTC
+          example: 2026-11-22T00:00:00Z
         windowEnd:
           type: string
           format: date-time
+          description: Fim da janela diaria em UTC
+          example: 2026-11-23T00:00:00Z
         usedTokens:
           type: integer
           format: int64
+          description: Tokens consumidos na janela atual
+          example: 12450
         usedRequests:
           type: integer
           format: int64
+          description: Requisicoes realizadas na janela atual
+          example: 28
         remainingTokens:
           type: integer
           format: int64
+          description: Saldo restante de tokens na janela atual
+          example: 487550
         remainingRequests:
           type: integer
           format: int64
+          description: Saldo restante de requisicoes na janela atual
+          example: 272
         quota:
           $ref: "#/components/schemas/UserQuotaResponse"
+          description: Politica de cota ativa para o usuario
         recentRecords:
           type: array
+          description: Lista dos registros de consumo mais recentes
           items:
             $ref: "#/components/schemas/UsageRecordResponse"
     RemoteTasksResponse:
       type: object
+      description: Lista de tarefas remotas do usuario autenticado
       properties:
         items:
           type: array
+          description: Tarefas ordenadas da mais recente para a mais antiga
           items:
             $ref: "#/components/schemas/RemoteTaskSummaryResponse"
     RemoteTaskDetailResponse:
       type: object
+      description: "Detalhes completos de uma tarefa remota, timeline de eventos e\
+        \ aprovacoes pendentes"
       properties:
         task:
           $ref: "#/components/schemas/RemoteTaskSummaryResponse"
+          description: Resumo atual da tarefa
         events:
           type: array
+          description: Eventos cronologicos reportados pelo runner
           items:
             $ref: "#/components/schemas/TaskEventResponse"
         approvals:
           type: array
+          description: Pedidos de aprovacao de ferramentas associados a tarefa
           items:
             $ref: "#/components/schemas/ToolApprovalResponse"
     SystemStatusResponse:
       type: object
+      description: Status basico de disponibilidade da API v1
       properties:
         service:
           type: string
+          description: Nome do servico
+          example: creatingj-backend
         apiVersion:
           type: string
+          description: Versao do contrato HTTP
+          example: v1
         status:
           type: string
+          description: Estado atual da API
+          example: UP
         timestamp:
           type: string
           format: date-time
+          description: Instante UTC da consulta
+          example: 2026-11-22T18:00:00Z
     ProjectsPageResponse:
       type: object
+      description: Pagina de projetos pertencentes ao usuario autenticado
       properties:
         items:
           type: array
+          description: Itens da pagina atual
           items:
             $ref: "#/components/schemas/ProjectResponse"
         page:
           type: integer
           format: int32
+          description: Indice da pagina (base 0)
+          example: 0
         size:
           type: integer
           format: int32
+          description: Tamanho maximo da pagina
+          example: 20
         totalElements:
           type: integer
           format: int64
+          description: Quantidade total de projetos encontrados
+          example: 3
     KnowledgeSourcesResponse:
       type: object
+      description: Lista de fontes de conhecimento indexadas do projeto
       properties:
         items:
           type: array
+          description: Fontes indexadas pertencentes ao projeto
           items:
             $ref: "#/components/schemas/KnowledgeSourceResponse"
     KnowledgeIndexJobsResponse:
       type: object
+      description: Lista dos jobs de indexacao de conhecimento do projeto
       properties:
         items:
           type: array
+          description: Jobs ordenados do mais recente ao mais antigo
           items:
             $ref: "#/components/schemas/KnowledgeIndexJobResponse"
     AgentRunsResponse:
       type: object
+      description: Lista de execucoes de agente vinculadas ao projeto
       properties:
         items:
           type: array
+          description: Execucoes ordenadas da mais recente para a mais antiga
           items:
             $ref: "#/components/schemas/AgentRunSummaryResponse"
     DevicesResponse:
       type: object
+      description: Lista de dispositivos pareados do usuario autenticado
       properties:
         items:
           type: array
+          description: Dispositivos ordenados do mais recente ao mais antigo
           items:
             $ref: "#/components/schemas/DeviceSummaryResponse"
     ConversationsPageResponse:
       type: object
+      description: Pagina de conversas pertencentes ao usuario autenticado
       properties:
         items:
           type: array
+          description: Lista de conversas na pagina atual
           items:
             $ref: "#/components/schemas/ConversationSummaryResponse"
         page:
           type: integer
           format: int32
+          description: Indice da pagina (base 0)
+          example: 0
         size:
           type: integer
           format: int32
+          description: Tamanho maximo da pagina
+          example: 20
         totalElements:
           type: integer
           format: int64
+          description: Quantidade total de conversas
+          example: 5
     ConversationHistoryResponse:
       type: object
+      description: Historico completo de uma conversa com mensagens e geracoes
       properties:
         conversation:
           $ref: "#/components/schemas/ConversationSummaryResponse"
+          description: Metadados da conversa
         messages:
           type: array
+          description: Mensagens ordenadas por sequenceNum
           items:
             $ref: "#/components/schemas/MessageResponse"
         generations:
           type: array
+          description: Execucoes de geracao de resposta associadas a conversa
           items:
             $ref: "#/components/schemas/GenerationSummaryResponse"
     SessionSummaryResponse:
       type: object
+      description: Resumo de uma sessao ativa do usuario
       properties:
         id:
           type: string
+          description: Identificador da sessao
+          example: 550e8400-e29b-41d4-a716-446655440002
         clientId:
           type: string
+          description: Cliente vinculado a sessao
+          example: creatingj-web
         authMethod:
           type: string
+          description: "Metodo de autenticacao (PASSWORD_BEARER, WEB_COOKIE, PKCE_REFRESH)"
+          example: WEB_COOKIE
         createdAt:
           type: string
           format: date-time
+          description: Instante UTC de criacao
+          example: 2026-11-22T18:00:00Z
         expiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao
+          example: 2026-11-23T06:00:00Z
     CurrentUserResponse:
       type: object
+      description: Perfil e contexto de sessao do usuario autenticado
       properties:
         id:
           type: string
+          description: Identificador do usuario
+          example: 550e8400-e29b-41d4-a716-446655440001
         email:
           type: string
+          description: E-mail do usuario
+          example: joao@creatingj.dev
         displayName:
           type: string
+          description: Nome de exibicao
+          example: Joao Grando
         status:
           type: string
+          description: "Estado da conta (PENDING_ACTIVATION, ACTIVE, SUSPENDED)"
+          example: ACTIVE
         roles:
           type: array
+          description: Papeis concedidos ao usuario
+          example:
+          - MEMBER
           items:
             type: string
           uniqueItems: true
         sessionId:
           type: string
+          description: Identificador da sessao atual
+          example: 550e8400-e29b-41d4-a716-446655440002
         clientId:
           type: string
+          description: "Identificador do cliente autenticado (creatingj-web, creatingj-desktop,\
+            \ etc.)"
+          example: creatingj-web
         sessionExpiresAt:
           type: string
           format: date-time
+          description: Instante UTC de expiracao da sessao atual
+          example: 2026-11-23T06:00:00Z
     UsersPageResponse:
       type: object
+      description: Pagina administrativa de usuarios gerenciados
       properties:
         items:
           type: array
+          description: Usuarios retornados na pagina atual
           items:
             $ref: "#/components/schemas/UserSummaryResponse"
         page:
           type: integer
           format: int32
+          description: Indice da pagina (base 0)
+          example: 0
         size:
           type: integer
           format: int32
+          description: Tamanho maximo da pagina
+          example: 20
         totalElements:
           type: integer
           format: int64
+          description: Total de usuarios cadastrados
+          example: 12
     AdminUsageOverviewResponse:
       type: object
+      description: Visao consolidada de consumo de inferencia na janela diaria atual
       properties:
         windowStart:
           type: string
           format: date-time
+          description: Inicio da janela diaria em UTC
+          example: 2026-11-22T00:00:00Z
         windowEnd:
           type: string
           format: date-time
+          description: Fim da janela diaria em UTC
+          example: 2026-11-23T00:00:00Z
         totalTokensToday:
           type: integer
           format: int64
+          description: Total de tokens consumidos hoje por todos os usuarios
+          example: 48250
         totalRequestsToday:
           type: integer
           format: int64
+          description: Total de requisicoes de inferencia executadas hoje
+          example: 134
   securitySchemes:
     bearerAuth:
       type: http

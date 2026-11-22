@@ -11,6 +11,7 @@ import io.github.jvpgjava.creatingj.identity.adapter.in.web.dto.v1.TokenPairResp
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.dto.v1.WebLoginResponse;
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -107,7 +108,12 @@ public interface MultiClientAuthApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<Void> revokeSession(String sessionId, AuthenticatedUser actor);
+    ResponseEntity<Void> revokeSession(
+            @Parameter(description = "Identificador UUID da sessao a revogar",
+                    example = "550e8400-e29b-41d4-a716-446655440002")
+            String sessionId,
+            AuthenticatedUser actor
+    );
 
     @Operation(
             operationId = "authorizePkceClient",

@@ -9,6 +9,7 @@ import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.RunnerTaskEventRe
 import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.RunnerTaskEventResponse;
 import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.ToolApprovalResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,7 +24,12 @@ import org.springframework.http.ResponseEntity;
 @SecurityRequirement(name = "deviceTokenAuth")
 public interface RunnerTaskApiDocs {
 
-    @Operation(operationId = "leaseNextRunnerTask", summary = "Adquirir lease da proxima tarefa destinada ao runner")
+    @Operation(
+            operationId = "leaseNextRunnerTask",
+            summary = "Adquirir lease da proxima tarefa destinada ao runner",
+            description = "Consulta a fila de tarefas do dispositivo autenticado via X-Device-Token e adquire "
+                    + "lease temporario da proxima tarefa pendente."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Resultado do lease",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -34,7 +40,12 @@ public interface RunnerTaskApiDocs {
     })
     ResponseEntity<RunnerLeaseResponse> leaseNext(AuthenticatedDevice device);
 
-    @Operation(operationId = "reportRunnerTaskEvent", summary = "Reportar evento de progresso com deduplicacao")
+    @Operation(
+            operationId = "reportRunnerTaskEvent",
+            summary = "Reportar evento de progresso com deduplicacao",
+            description = "Persiste evento de progresso da tarefa e propaga em tempo real via SSE, deduplicando "
+                    + "retentativas pela chave eventKey."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Evento registrado ou deduplicado",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -47,12 +58,19 @@ public interface RunnerTaskApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<RunnerTaskEventResponse> reportEvent(
+            @Parameter(description = "Identificador UUID da tarefa atribuida ao dispositivo",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
             String taskId,
             RunnerTaskEventRequest request,
             AuthenticatedDevice device
     );
 
-    @Operation(operationId = "requestRunnerToolApproval", summary = "Solicitar aprovacao pontual com TTL para tool")
+    @Operation(
+            operationId = "requestRunnerToolApproval",
+            summary = "Solicitar aprovacao pontual com TTL para tool",
+            description = "Submete ferramenta/comando para avaliacao pela politica deterministica e cria pedido "
+                    + "de aprovacao humana de uso unico com expiracao configurada."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Aprovacao criada",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -68,12 +86,18 @@ public interface RunnerTaskApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<ToolApprovalResponse> requestApproval(
+            @Parameter(description = "Identificador UUID da tarefa atribuida ao dispositivo",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
             String taskId,
             RunnerApprovalRequest request,
             AuthenticatedDevice device
     );
 
-    @Operation(operationId = "completeRunnerTask", summary = "Concluir ou falhar tarefa atribuida ao dispositivo")
+    @Operation(
+            operationId = "completeRunnerTask",
+            summary = "Concluir ou falhar tarefa atribuida ao dispositivo",
+            description = "Marca a tarefa como COMPLETED ou FAILED e registra o resumo final de execucao."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tarefa finalizada",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -86,6 +110,8 @@ public interface RunnerTaskApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<RemoteTaskSummaryResponse> completeTask(
+            @Parameter(description = "Identificador UUID da tarefa atribuida ao dispositivo",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
             String taskId,
             RunnerCompleteTaskRequest request,
             AuthenticatedDevice device

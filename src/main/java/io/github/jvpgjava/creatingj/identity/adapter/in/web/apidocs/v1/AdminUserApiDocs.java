@@ -6,6 +6,7 @@ import io.github.jvpgjava.creatingj.identity.adapter.in.web.dto.v1.UserSummaryRe
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.dto.v1.UsersPageResponse;
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -67,10 +68,17 @@ public interface AdminUserApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<UsersPageResponse> listUsers(
+            @Parameter(description = "Indice da pagina (base 0)", example = "0")
             int page,
+            @Parameter(description = "Tamanho da pagina (1..100)", example = "20")
             int size,
+            @Parameter(description = "Filtro opcional de status (PENDING_ACTIVATION, ACTIVE, SUSPENDED)",
+                    example = "ACTIVE")
             String status,
+            @Parameter(description = "Campo de ordenacao permitido (createdAt, email, displayName)",
+                    example = "createdAt")
             String sort,
+            @Parameter(description = "Direcao da ordenacao (asc ou desc)", example = "desc")
             String direction,
             AuthenticatedUser actor
     );
@@ -98,6 +106,8 @@ public interface AdminUserApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<UserSummaryResponse> suspendUser(
+            @Parameter(description = "Identificador UUID do usuario alvo",
+                    example = "550e8400-e29b-41d4-a716-446655440001")
             String userId,
             AuthenticatedUser actor
     );

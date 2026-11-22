@@ -8,6 +8,7 @@ import io.github.jvpgjava.creatingj.knowledge.adapter.in.web.dto.v1.KnowledgeSea
 import io.github.jvpgjava.creatingj.knowledge.adapter.in.web.dto.v1.KnowledgeSearchResponse;
 import io.github.jvpgjava.creatingj.knowledge.adapter.in.web.dto.v1.KnowledgeSourcesResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -25,7 +26,9 @@ public interface KnowledgeApiDocs {
 
     @Operation(
             operationId = "ingestKnowledgeSource",
-            summary = "Ingerir ou atualizar fonte de conhecimento de um projeto com deduplicacao e pgvector"
+            summary = "Ingerir ou atualizar fonte de conhecimento de um projeto com deduplicacao e pgvector",
+            description = "Valida caminho seguro e ausencia de segredos, calcula hash SHA-256 para deduplicacao, "
+                    + "gera chunks e grava embeddings no pgvector."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Fonte ingerida ou deduplicada sem alteracao",
@@ -42,12 +45,18 @@ public interface KnowledgeApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<IngestKnowledgeSourceResponse> ingest(
+            @Parameter(description = "Identificador UUID do projeto",
+                    example = "550e8400-e29b-41d4-a716-446655440010")
             String projectId,
             IngestKnowledgeSourceRequest request,
             AuthenticatedUser actor
     );
 
-    @Operation(operationId = "listKnowledgeSources", summary = "Listar fontes indexadas de um projeto proprio")
+    @Operation(
+            operationId = "listKnowledgeSources",
+            summary = "Listar fontes indexadas de um projeto proprio",
+            description = "Retorna todas as fontes cadastradas no indice vetorial do projeto."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lista de fontes",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -59,9 +68,18 @@ public interface KnowledgeApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<KnowledgeSourcesResponse> listSources(String projectId, AuthenticatedUser actor);
+    ResponseEntity<KnowledgeSourcesResponse> listSources(
+            @Parameter(description = "Identificador UUID do projeto",
+                    example = "550e8400-e29b-41d4-a716-446655440010")
+            String projectId,
+            AuthenticatedUser actor
+    );
 
-    @Operation(operationId = "deleteKnowledgeSource", summary = "Excluir fonte de conhecimento e seus vetores")
+    @Operation(
+            operationId = "deleteKnowledgeSource",
+            summary = "Excluir fonte de conhecimento e seus vetores",
+            description = "Remove a fonte e todos os chunks vetoriais correspondentes no pgvector."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Fonte e vetores removidos"),
             @ApiResponse(responseCode = "401", description = "Nao autenticado",
@@ -71,11 +89,21 @@ public interface KnowledgeApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<Void> deleteSource(String projectId, String sourceId, AuthenticatedUser actor);
+    ResponseEntity<Void> deleteSource(
+            @Parameter(description = "Identificador UUID do projeto",
+                    example = "550e8400-e29b-41d4-a716-446655440010")
+            String projectId,
+            @Parameter(description = "Identificador UUID da fonte de conhecimento",
+                    example = "550e8400-e29b-41d4-a716-446655440030")
+            String sourceId,
+            AuthenticatedUser actor
+    );
 
     @Operation(
             operationId = "searchProjectKnowledge",
-            summary = "Executar busca vetorial pgvector filtrada por proprietario e projeto"
+            summary = "Executar busca vetorial pgvector filtrada por proprietario e projeto",
+            description = "Converte a consulta em embedding usando o provedor ativo e retorna os trechos mais "
+                    + "semelhantes por distancia de cosseno dentro do projeto."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Trechos mais relevantes com citacao de fonte",
@@ -92,12 +120,18 @@ public interface KnowledgeApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<KnowledgeSearchResponse> search(
+            @Parameter(description = "Identificador UUID do projeto",
+                    example = "550e8400-e29b-41d4-a716-446655440010")
             String projectId,
             KnowledgeSearchRequest request,
             AuthenticatedUser actor
     );
 
-    @Operation(operationId = "listKnowledgeIndexJobs", summary = "Listar jobs recentes de indexacao do projeto")
+    @Operation(
+            operationId = "listKnowledgeIndexJobs",
+            summary = "Listar jobs recentes de indexacao do projeto",
+            description = "Retorna historico de jobs de ingestao, deduplicacao e exclusao executados no projeto."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lista de jobs de indexacao",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -109,5 +143,12 @@ public interface KnowledgeApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<KnowledgeIndexJobsResponse> listJobs(String projectId, int limit, AuthenticatedUser actor);
+    ResponseEntity<KnowledgeIndexJobsResponse> listJobs(
+            @Parameter(description = "Identificador UUID do projeto",
+                    example = "550e8400-e29b-41d4-a716-446655440010")
+            String projectId,
+            @Parameter(description = "Quantidade maxima de jobs retornados (1..50)", example = "20")
+            int limit,
+            AuthenticatedUser actor
+    );
 }

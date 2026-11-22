@@ -14,6 +14,21 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(name = "springdoc.api-docs.enabled", havingValue = "true", matchIfMissing = true)
 public class OpenApiConfig {
 
+    private static final String API_DESCRIPTION = """
+            Contrato HTTP versionado da plataforma CreatingJ (v1).
+
+            ### Como testar pelo Swagger UI
+            1. Autentique via `POST /api/v1/auth/login` para obter um `accessToken` opaco.
+            2. Clique em **Authorize**, informe o token em `bearerAuth` e execute os endpoints protegidos.
+            3. Para fluxo web com cookie (`POST /api/v1/auth/web/login`), envie o header `X-XSRF-TOKEN` \
+            em mutacoes (`POST`, `PUT`, `PATCH`, `DELETE`).
+            4. Endpoints `/api/v1/runner/**` exigem exclusivamente o header `X-Device-Token` emitido no pareamento.
+
+            ### Padroes do contrato
+            - Erros seguem RFC 9457 (`application/problem+json`) com `errorCode` e `traceId`.
+            - Endpoints de streaming utilizam `text/event-stream` (SSE).
+            """;
+
     @Bean
     public OpenAPI creatingjOpenApi() {
         return new OpenAPI()
@@ -35,7 +50,7 @@ public class OpenApiConfig {
                                 .description("Credencial exclusiva do dispositivo pareado (ROLE_RUNNER)")))
                 .info(new Info()
                         .title("CreatingJ API")
-                        .description("Contrato versionado da plataforma CreatingJ")
+                        .description(API_DESCRIPTION)
                         .version("v1"));
     }
 

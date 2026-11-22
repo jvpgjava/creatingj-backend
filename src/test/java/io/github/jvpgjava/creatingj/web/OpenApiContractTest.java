@@ -102,6 +102,14 @@ class OpenApiContractTest {
         assertThat(generated.path("components").path("securitySchemes").has("bearerAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("cookieAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("deviceTokenAuth")).isTrue();
+        assertThat(generated.path("components").path("schemas").path("LoginRequest")
+                .path("properties").path("email").path("example").asString()).isNotBlank();
+        assertThat(generated.path("components").path("schemas").path("KnowledgeSearchRequest")
+                .path("properties").path("query").path("example").asString()).isNotBlank();
+        assertThat(generated.path("components").path("schemas").path("CreateRemoteTaskRequest")
+                .path("properties").path("title").path("example").asString()).isNotBlank();
+        assertThat(generated.path("paths").path("/api/v1/projects/{projectId}/knowledge/search")
+                .path("post").path("parameters").get(0).path("example").asString()).isNotBlank();
         assertThat(generated.path("paths").has("/api/v1/auth/register")).isFalse();
         assertThat(body).doesNotContain("passwordHash", "CRJ_API_KEY", "STAC_API_KEY");
     }
@@ -132,6 +140,11 @@ class OpenApiContractTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
+
+        if (Boolean.getBoolean("creatingj.openapi.updateSnapshot")) {
+            Files.writeString(snapshotPath, normalizeLineEndings(generatedYaml) + "\n");
+            snapshotContent = Files.readString(snapshotPath);
+        }
 
         assertThat(normalizeLineEndings(generatedYaml)).isEqualTo(normalizeLineEndings(snapshotContent));
     }

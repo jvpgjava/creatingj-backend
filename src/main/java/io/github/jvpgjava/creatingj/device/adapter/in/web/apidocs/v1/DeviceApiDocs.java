@@ -6,6 +6,7 @@ import io.github.jvpgjava.creatingj.device.adapter.in.web.dto.v1.DevicesResponse
 import io.github.jvpgjava.creatingj.device.adapter.in.web.dto.v1.PairingChallengeResponse;
 import io.github.jvpgjava.creatingj.identity.adapter.in.web.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -21,7 +22,11 @@ import org.springframework.http.ResponseEntity;
 @SecurityRequirement(name = "cookieAuth")
 public interface DeviceApiDocs {
 
-    @Operation(operationId = "createPairingChallenge", summary = "Gerar codigo de pareamento de uso unico")
+    @Operation(
+            operationId = "createPairingChallenge",
+            summary = "Gerar codigo de pareamento de uso unico",
+            description = "Emite um codigo temporario para parear o agente local via POST /api/v1/runner/pair/complete."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Codigo gerado",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -38,7 +43,11 @@ public interface DeviceApiDocs {
             AuthenticatedUser actor
     );
 
-    @Operation(operationId = "listDevices", summary = "Listar dispositivos pareados e status online do usuario")
+    @Operation(
+            operationId = "listDevices",
+            summary = "Listar dispositivos pareados e status online do usuario",
+            description = "Exibe dispositivos ativos ou revogados do usuario e indica presenca com base no heartbeat."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lista de dispositivos",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -49,7 +58,11 @@ public interface DeviceApiDocs {
     })
     ResponseEntity<DevicesResponse> listDevices(AuthenticatedUser actor);
 
-    @Operation(operationId = "revokeDevice", summary = "Revogar dispositivo e invalidar suas credenciais")
+    @Operation(
+            operationId = "revokeDevice",
+            summary = "Revogar dispositivo e invalidar suas credenciais",
+            description = "Invalida imediatamente o X-Device-Token do dispositivo e impede novos leases de tarefa."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Dispositivo revogado",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -61,5 +74,10 @@ public interface DeviceApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<DeviceSummaryResponse> revokeDevice(String deviceId, AuthenticatedUser actor);
+    ResponseEntity<DeviceSummaryResponse> revokeDevice(
+            @Parameter(description = "Identificador UUID do dispositivo",
+                    example = "550e8400-e29b-41d4-a716-446655440050")
+            String deviceId,
+            AuthenticatedUser actor
+    );
 }

@@ -5,6 +5,7 @@ import io.github.jvpgjava.creatingj.inference.adapter.in.web.dto.v1.AdminUsageOv
 import io.github.jvpgjava.creatingj.inference.adapter.in.web.dto.v1.UpdateUserQuotaRequest;
 import io.github.jvpgjava.creatingj.inference.adapter.in.web.dto.v1.UserQuotaResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -22,7 +23,8 @@ public interface AdminUsageApiDocs {
 
     @Operation(
             operationId = "getAdminUsageOverview",
-            summary = "Consultar consumo agregado diario da plataforma"
+            summary = "Consultar consumo agregado diario da plataforma",
+            description = "Retorna total de tokens e requisicoes executados na janela diaria UTC atual."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Visao agregada de consumo",
@@ -39,7 +41,8 @@ public interface AdminUsageApiDocs {
 
     @Operation(
             operationId = "updateUserQuota",
-            summary = "Configurar quotas diarias e limite de concorrencia de um usuario"
+            summary = "Configurar quotas diarias e limite de concorrencia de um usuario",
+            description = "Define ou atualiza limite diario de tokens, requisicoes e concorrencia para o usuario alvo."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Quota atualizada",
@@ -56,6 +59,8 @@ public interface AdminUsageApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<UserQuotaResponse> updateUserQuota(
+            @Parameter(description = "Identificador UUID do usuario alvo",
+                    example = "550e8400-e29b-41d4-a716-446655440001")
             String userId,
             UpdateUserQuotaRequest request,
             AuthenticatedUser actor

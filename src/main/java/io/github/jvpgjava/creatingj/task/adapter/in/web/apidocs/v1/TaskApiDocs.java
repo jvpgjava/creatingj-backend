@@ -9,6 +9,7 @@ import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.RemoteTasksRespon
 import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.ToolApprovalDecisionRequest;
 import io.github.jvpgjava.creatingj.task.adapter.in.web.dto.v1.ToolApprovalDecisionResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -25,7 +26,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @SecurityRequirement(name = "cookieAuth")
 public interface TaskApiDocs {
 
-    @Operation(operationId = "createRemoteTask", summary = "Enfileirar tarefa remota para dispositivo autorizado")
+    @Operation(
+            operationId = "createRemoteTask",
+            summary = "Enfileirar tarefa remota para dispositivo autorizado",
+            description = "Enfileira tarefa para execucao pelo runner do dispositivo. Caso o dispositivo esteja "
+                    + "offline, a tarefa permanece em QUEUED ate o proximo lease sem simular execucao."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Tarefa criada ou deduplicada",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -45,7 +51,11 @@ public interface TaskApiDocs {
     })
     ResponseEntity<CreateRemoteTaskResponse> create(CreateRemoteTaskRequest request, AuthenticatedUser actor);
 
-    @Operation(operationId = "listRemoteTasks", summary = "Listar tarefas remotas recentes do usuario")
+    @Operation(
+            operationId = "listRemoteTasks",
+            summary = "Listar tarefas remotas recentes do usuario",
+            description = "Retorna as tarefas mais recentes do usuario autenticado."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lista de tarefas",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -54,9 +64,17 @@ public interface TaskApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<RemoteTasksResponse> list(int limit, AuthenticatedUser actor);
+    ResponseEntity<RemoteTasksResponse> list(
+            @Parameter(description = "Quantidade maxima de tarefas retornadas (1..50)", example = "20")
+            int limit,
+            AuthenticatedUser actor
+    );
 
-    @Operation(operationId = "getRemoteTask", summary = "Obter detalhes, eventos e aprovacoes de uma tarefa")
+    @Operation(
+            operationId = "getRemoteTask",
+            summary = "Obter detalhes, eventos e aprovacoes de uma tarefa",
+            description = "Consulta o estado completo da tarefa, eventos cronologicos e aprovacoes de tools."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalhes da tarefa",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -68,9 +86,18 @@ public interface TaskApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<RemoteTaskDetailResponse> getDetail(String taskId, AuthenticatedUser actor);
+    ResponseEntity<RemoteTaskDetailResponse> getDetail(
+            @Parameter(description = "Identificador UUID da tarefa remota",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
+            String taskId,
+            AuthenticatedUser actor
+    );
 
-    @Operation(operationId = "cancelRemoteTask", summary = "Cancelar tarefa remota e rejeitar aprovacoes pendentes")
+    @Operation(
+            operationId = "cancelRemoteTask",
+            summary = "Cancelar tarefa remota e rejeitar aprovacoes pendentes",
+            description = "Interrompe a tarefa e marca automaticamente quaisquer aprovacoes pendentes como rejeitadas."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tarefa cancelada",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -82,9 +109,18 @@ public interface TaskApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    ResponseEntity<RemoteTaskSummaryResponse> cancel(String taskId, AuthenticatedUser actor);
+    ResponseEntity<RemoteTaskSummaryResponse> cancel(
+            @Parameter(description = "Identificador UUID da tarefa remota",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
+            String taskId,
+            AuthenticatedUser actor
+    );
 
-    @Operation(operationId = "decideRemoteToolApproval", summary = "Aprovar ou rejeitar solicitacao pontual do runner")
+    @Operation(
+            operationId = "decideRemoteToolApproval",
+            summary = "Aprovar ou rejeitar solicitacao pontual do runner",
+            description = "Decide um pedido de aprovacao pendente dentro do seu TTL. Cada aprovacao e de uso unico."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Decisao registrada",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -100,13 +136,21 @@ public interface TaskApiDocs {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     ResponseEntity<ToolApprovalDecisionResponse> decideApproval(
+            @Parameter(description = "Identificador UUID da tarefa remota",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
             String taskId,
+            @Parameter(description = "Identificador UUID do pedido de aprovacao",
+                    example = "550e8400-e29b-41d4-a716-446655440062")
             String approvalId,
             ToolApprovalDecisionRequest request,
             AuthenticatedUser actor
     );
 
-    @Operation(operationId = "streamRemoteTaskEvents", summary = "Acompanhar progresso de uma tarefa remota via SSE")
+    @Operation(
+            operationId = "streamRemoteTaskEvents",
+            summary = "Acompanhar progresso de uma tarefa remota via SSE",
+            description = "Abre fluxo text/event-stream com o snapshot inicial da tarefa e eventos subsequentes."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Stream SSE de eventos da tarefa",
                     content = @Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE)),
@@ -117,5 +161,10 @@ public interface TaskApiDocs {
                     content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    SseEmitter streamEvents(String taskId, AuthenticatedUser actor);
+    SseEmitter streamEvents(
+            @Parameter(description = "Identificador UUID da tarefa remota",
+                    example = "550e8400-e29b-41d4-a716-446655440060")
+            String taskId,
+            AuthenticatedUser actor
+    );
 }
