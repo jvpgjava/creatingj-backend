@@ -4,7 +4,11 @@
   <h1>CreatingJ Backend</h1>
 
   <p>
-    <strong>Plataforma de Engenharia de Software Assistida por IA — Monólito Modular Hexagonal</strong>
+    <strong>Seu assistente de engenharia de software com IA, pronto para qualquer linguagem e framework.</strong>
+  </p>
+
+  <p>
+    Converse sobre código em tempo real, busque conhecimento dentro dos seus próprios projetos, planeje tarefas com agentes inteligentes e acompanhe execuções nos seus dispositivos pareados — tudo com segurança, controle e privacidade no centro.
   </p>
 
   <p>
@@ -15,8 +19,6 @@
     <a href="openapi/openapi-v1.yaml"><img src="https://img.shields.io/badge/OpenAPI-v1-6BA539?logo=openapiinitiative&logoColor=white" alt="OpenAPI v1" /></a>
   </p>
 </div>
-
-Backend principal da plataforma **CreatingJ**, desenvolvido como um **monólito modular hexagonal** em Java 25 e Spring Boot 4.2, com chat em tempo real (SSE), RAG vetorial isolado por projeto (`pgvector` + embeddings ONNX locais via Spring AI ou API OpenAI-compatible), orquestração de agente com política determinística de segurança e protocolo de execução remota para dispositivos pareados (`creatingj-agent`).
 
 ---
 
