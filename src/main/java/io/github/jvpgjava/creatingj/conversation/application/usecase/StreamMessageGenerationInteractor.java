@@ -6,6 +6,8 @@ import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
 import io.github.jvpgjava.creatingj.common.application.port.out.ClockPort;
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
+import io.github.jvpgjava.creatingj.common.domain.OutputSecurityGuard;
+import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.conversation.application.port.in.StreamMessageGenerationUseCase;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ActiveGenerationRegistryPort;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ConversationStorePort;
@@ -99,16 +101,8 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
                 startedAt
         ));
 
-        List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
-        List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
-        int promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
-        GenerationRequest request = new GenerationRequest(
-                conversation.modelId(),
-                promptMessages,
-                defaultMaxTokens,
-                DEFAULT_TEMPERATURE
-        );
-
+        PromptSecurityGuard.GuardVerdict inputVerdict = PromptSecurityGuard.inspectInput(command.content());
+        int promptChars = command.content() == null ? 0 : command.content().length();
         activeRegistry.register(generationId);
         AtomicInteger eventSeq = new AtomicInteger(1);
         StringBuilder partial = new StringBuilder();
@@ -116,6 +110,48 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         UsageOutcome outcome = UsageOutcome.FAILED;
         try {
             sink.accept(GenerationStreamEvent.started(generationId, eventSeq.getAndIncrement()));
+
+            if (inputVerdict.blocked()) {
+                Instant blockedAt = clock.now();
+                String refusal = inputVerdict.refusalMessage();
+                partial.append(refusal);
+                outcome = UsageOutcome.COMPLETED;
+                auditPort.record(AuditEvent.of(
+                        UUID.randomUUID(),
+                        command.actorUserId().value(),
+                        command.actorUserId().value(),
+                        AuditAction.GUARDRAIL_TRIGGERED,
+                        "BLOCKED",
+                        "category=" + inputVerdict.category() + " conversationId=" + conversation.id().value(),
+                        blockedAt
+                ));
+                sink.accept(GenerationStreamEvent.delta(generationId, eventSeq.getAndIncrement(), refusal));
+                int assistantSeq = messageStore.nextSequenceNumber(conversation.id());
+                ChatMessage assistantMessage = messageStore.save(ChatMessage.create(
+                        UUID.randomUUID(),
+                        conversation.id(),
+                        MessageRole.ASSISTANT,
+                        refusal,
+                        assistantSeq,
+                        blockedAt
+                ));
+                TokenUsage zeroUsage = new TokenUsage(0, 0, 0);
+                generationStore.save(generation.complete(assistantMessage.id(), zeroUsage, blockedAt));
+                conversationStore.save(conversation.touch(blockedAt));
+                sink.accept(GenerationStreamEvent.completed(
+                        generationId, eventSeq.getAndIncrement(), assistantMessage.id(), zeroUsage));
+                return;
+            }
+
+            List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
+            List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
+            promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
+            GenerationRequest request = new GenerationRequest(
+                    conversation.modelId(),
+                    promptMessages,
+                    defaultMaxTokens,
+                    DEFAULT_TEMPERATURE
+            );
 
             ModelCompletionResult result = modelGateway.stream(
                     request,
@@ -130,12 +166,23 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
             );
 
             Instant finishedAt = clock.now();
-            String finalContent = result.content() == null || result.content().isBlank()
+            String rawContent = result.content() == null || result.content().isBlank()
                     ? partial.toString()
                     : result.content();
-            if (finalContent.isBlank()) {
-                finalContent = "(sem resposta textual)";
+            OutputSecurityGuard.SanitizedOutput sanitized = OutputSecurityGuard.inspectAndSanitize(rawContent);
+            if (!sanitized.flags().isEmpty()) {
+                auditPort.record(AuditEvent.of(
+                        UUID.randomUUID(),
+                        command.actorUserId().value(),
+                        command.actorUserId().value(),
+                        AuditAction.GUARDRAIL_TRIGGERED,
+                        sanitized.replaced() ? "REPLACED" : "REDACTED",
+                        "outputFlags=" + String.join(",", sanitized.flags())
+                                + " conversationId=" + conversation.id().value(),
+                        finishedAt
+                ));
             }
+            String finalContent = sanitized.content();
 
             reportedUsage = result.usage();
             outcome = UsageOutcome.COMPLETED;
@@ -197,12 +244,13 @@ public final class StreamMessageGenerationInteractor implements StreamMessageGen
         if (partialText == null || partialText.isBlank()) {
             return null;
         }
+        String sanitizedPartial = OutputSecurityGuard.inspectAndSanitize(partialText).content();
         int seq = messageStore.nextSequenceNumber(conversation.id());
         ChatMessage partialMessage = messageStore.save(ChatMessage.create(
                 UUID.randomUUID(),
                 conversation.id(),
                 MessageRole.ASSISTANT,
-                partialText,
+                sanitizedPartial,
                 seq,
                 now
         ));

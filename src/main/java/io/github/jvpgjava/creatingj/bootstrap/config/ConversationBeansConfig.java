@@ -62,7 +62,7 @@ public class ConversationBeansConfig {
             EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clockPort,
-            @Value("${creatingj.provider.ai.default-max-tokens:2048}") int defaultMaxTokens
+            @Value("${creatingj.provider.ai.default-max-tokens:4096}") int defaultMaxTokens
     ) {
         return new SendMessageInteractor(
                 conversationStore, messageStore, generationStore, modelGateway, quotaUsage,
@@ -79,7 +79,7 @@ public class ConversationBeansConfig {
             EnforceQuotaAndRecordUsageUseCase quotaUsage,
             AuditPort auditPort,
             ClockPort clockPort,
-            @Value("${creatingj.provider.ai.default-max-tokens:2048}") int defaultMaxTokens
+            @Value("${creatingj.provider.ai.default-max-tokens:4096}") int defaultMaxTokens
     ) {
         return new StreamMessageGenerationInteractor(
                 conversationStore, messageStore, generationStore, activeRegistry, modelGateway, quotaUsage,

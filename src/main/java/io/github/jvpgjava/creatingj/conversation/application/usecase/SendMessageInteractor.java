@@ -6,6 +6,8 @@ import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
 import io.github.jvpgjava.creatingj.common.application.port.out.ClockPort;
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
+import io.github.jvpgjava.creatingj.common.domain.OutputSecurityGuard;
+import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.conversation.application.port.in.SendMessageUseCase;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.ConversationStorePort;
 import io.github.jvpgjava.creatingj.conversation.application.port.out.GenerationStorePort;
@@ -90,25 +92,68 @@ public final class SendMessageInteractor implements SendMessageUseCase {
                 startedAt
         ));
 
-        List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
-        List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
-        int promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
-        GenerationRequest request = new GenerationRequest(
-                conversation.modelId(),
-                promptMessages,
-                defaultMaxTokens,
-                DEFAULT_TEMPERATURE
-        );
-
+        PromptSecurityGuard.GuardVerdict inputVerdict = PromptSecurityGuard.inspectInput(command.content());
+        int promptChars = command.content() == null ? 0 : command.content().length();
         TokenUsage reportedUsage = TokenUsage.empty();
         int completionChars = 0;
         UsageOutcome outcome = UsageOutcome.FAILED;
         try {
+            if (inputVerdict.blocked()) {
+                Instant blockedAt = clock.now();
+                String refusal = inputVerdict.refusalMessage();
+                completionChars = refusal.length();
+                outcome = UsageOutcome.COMPLETED;
+                auditPort.record(AuditEvent.of(
+                        UUID.randomUUID(),
+                        command.actorUserId().value(),
+                        command.actorUserId().value(),
+                        AuditAction.GUARDRAIL_TRIGGERED,
+                        "BLOCKED",
+                        "category=" + inputVerdict.category() + " conversationId=" + conversation.id().value(),
+                        blockedAt
+                ));
+                int assistantSeq = messageStore.nextSequenceNumber(conversation.id());
+                ChatMessage assistantMessage = messageStore.save(ChatMessage.create(
+                        UUID.randomUUID(),
+                        conversation.id(),
+                        MessageRole.ASSISTANT,
+                        refusal,
+                        assistantSeq,
+                        blockedAt
+                ));
+                Generation completed = generationStore.save(
+                        generation.complete(assistantMessage.id(), new TokenUsage(0, 0, 0), blockedAt));
+                conversationStore.save(conversation.touch(blockedAt));
+                return new MessageExchangeResult(userMessage, assistantMessage, completed);
+            }
+
+            List<ChatMessage> history = messageStore.findByConversationOrderBySequenceAsc(conversation.id());
+            List<PromptMessage> promptMessages = PromptWindowAssembler.assemble(history);
+            promptChars = promptMessages.stream().mapToInt(m -> m.content().length()).sum();
+            GenerationRequest request = new GenerationRequest(
+                    conversation.modelId(),
+                    promptMessages,
+                    defaultMaxTokens,
+                    DEFAULT_TEMPERATURE
+            );
+
             ModelCompletionResult completion = modelGateway.complete(request);
             Instant finishedAt = clock.now();
-            String assistantContent = (completion.content() == null || completion.content().isBlank())
-                    ? "(sem resposta textual)"
-                    : completion.content();
+            OutputSecurityGuard.SanitizedOutput sanitized =
+                    OutputSecurityGuard.inspectAndSanitize(completion.content());
+            if (!sanitized.flags().isEmpty()) {
+                auditPort.record(AuditEvent.of(
+                        UUID.randomUUID(),
+                        command.actorUserId().value(),
+                        command.actorUserId().value(),
+                        AuditAction.GUARDRAIL_TRIGGERED,
+                        sanitized.replaced() ? "REPLACED" : "REDACTED",
+                        "outputFlags=" + String.join(",", sanitized.flags())
+                                + " conversationId=" + conversation.id().value(),
+                        finishedAt
+                ));
+            }
+            String assistantContent = sanitized.content();
 
             reportedUsage = completion.usage();
             completionChars = assistantContent.length();

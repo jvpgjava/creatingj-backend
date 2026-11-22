@@ -30,9 +30,9 @@ public class InferenceBeansConfig {
             InferenceMetricsPort metrics,
             AuditPort auditPort,
             ClockPort clockPort,
-            @Value("${creatingj.quota.default-daily-tokens:200000}") long defaultDailyTokenLimit,
-            @Value("${creatingj.quota.default-daily-requests:300}") int defaultDailyRequestLimit,
-            @Value("${creatingj.quota.default-max-concurrent:3}") int defaultMaxConcurrent
+            @Value("${creatingj.quota.default-daily-tokens:10000000}") long defaultDailyTokenLimit,
+            @Value("${creatingj.quota.default-daily-requests:500}") int defaultDailyRequestLimit,
+            @Value("${creatingj.quota.default-max-concurrent:4}") int defaultMaxConcurrent
     ) {
         return new EnforceQuotaAndRecordUsageInteractor(
                 quotaStore, usageStore, concurrencyLimiter, metrics, auditPort, clockPort,
@@ -44,9 +44,9 @@ public class InferenceBeansConfig {
             UserQuotaStorePort quotaStore,
             UsageRecordStorePort usageStore,
             ClockPort clockPort,
-            @Value("${creatingj.quota.default-daily-tokens:200000}") long defaultDailyTokenLimit,
-            @Value("${creatingj.quota.default-daily-requests:300}") int defaultDailyRequestLimit,
-            @Value("${creatingj.quota.default-max-concurrent:3}") int defaultMaxConcurrent
+            @Value("${creatingj.quota.default-daily-tokens:10000000}") long defaultDailyTokenLimit,
+            @Value("${creatingj.quota.default-daily-requests:500}") int defaultDailyRequestLimit,
+            @Value("${creatingj.quota.default-max-concurrent:4}") int defaultMaxConcurrent
     ) {
         return new GetOwnUsageSummaryInteractor(
                 quotaStore, usageStore, clockPort,

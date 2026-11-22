@@ -33,12 +33,27 @@ public final class KnowledgeIngestionPolicy {
     private static final List<Pattern> SECRET_PATTERNS = List.of(
             Pattern.compile("-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
             Pattern.compile("\\bAKIA[0-9A-Z]{16}\\b"),
+            Pattern.compile("\\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\\b"),
+            Pattern.compile("\\bgithub_pat_[A-Za-z0-9_]{20,}\\b"),
             Pattern.compile("\\b(?:sk|stac)_[A-Za-z0-9_-]{16,}\\b"),
             Pattern.compile("\\bsk-[A-Za-z0-9_-]{20,}\\b"),
-            Pattern.compile("(?i)\\b(?:CRJ_API_KEY|STAC_API_KEY|AWS_SECRET_ACCESS_KEY)\\s*=\\s*\\S+")
+            Pattern.compile("(?i)\\b(?:CRJ_API_KEY|STAC_API_KEY|AWS_SECRET_ACCESS_KEY|CREATINGJ_DB_PASSWORD)"
+                    + "\\s*=\\s*\\S+")
     );
 
     private KnowledgeIngestionPolicy() {
+    }
+
+    public static boolean containsSecret(String content) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        for (Pattern pattern : SECRET_PATTERNS) {
+            if (pattern.matcher(content).find()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String normalizeAndValidatePath(String rawPath) {
@@ -109,13 +124,11 @@ public final class KnowledgeIngestionPolicy {
                     "Conteudo da fonte excede o limite de " + MAX_CONTENT_LENGTH + " caracteres."
             );
         }
-        for (Pattern pattern : SECRET_PATTERNS) {
-            if (pattern.matcher(normalized).find()) {
-                throw new DomainException(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Possivel segredo ou credencial detectado no conteudo; indexacao bloqueada."
-                );
-            }
+        if (containsSecret(normalized)) {
+            throw new DomainException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Possivel segredo ou credencial detectado no conteudo; indexacao bloqueada."
+            );
         }
         return normalized;
     }

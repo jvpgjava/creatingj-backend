@@ -1,10 +1,12 @@
 package io.github.jvpgjava.creatingj.agent.domain;
 
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
+import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIngestionPolicy;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class ToolExecutionPolicyEngine {
@@ -12,33 +14,90 @@ public final class ToolExecutionPolicyEngine {
     private static final List<String> ALLOWED_COMMAND_PREFIXES = List.of(
             "mvn test",
             "mvn verify",
+            "mvn -b test",
+            "mvn -b verify",
             "./mvnw test",
             "./mvnw verify",
+            "./mvnw -b test",
+            "./mvnw -b verify",
             "mvnw test",
             "mvnw verify",
+            "mvnw -b test",
+            "mvnw -b verify",
+            "gradle test",
+            "./gradlew test",
             "npm test",
             "npm run build",
             "npm run lint",
+            "pnpm test",
+            "pnpm build",
+            "pnpm lint",
             "cargo test",
             "cargo check",
+            "cargo clippy",
+            "pytest",
             "git status",
             "git diff",
             "git log"
     );
 
+    private static final Set<String> FORBIDDEN_WRITE_FILENAMES = Set.of(
+            "jenkinsfile",
+            "dockerfile",
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "makefile",
+            "mvnw",
+            "mvnw.cmd",
+            "gradlew",
+            "gradlew.bat",
+            "authorized_keys",
+            "known_hosts",
+            "ssh_config"
+    );
+
+    private static final Set<String> FORBIDDEN_WRITE_PREFIXES = Set.of(
+            ".github/",
+            ".husky/",
+            ".mvn/",
+            ".gradle/",
+            ".vscode/",
+            ".idea/"
+    );
+
+    private static final Set<String> FORBIDDEN_WRITE_EXTENSIONS = Set.of(
+            ".sh", ".bash", ".zsh", ".bat", ".cmd", ".ps1", ".vbs", ". phar"
+    );
+
     private static final List<Pattern> FORBIDDEN_COMMAND_PATTERNS = List.of(
             Pattern.compile("[;|&`<>\\n\\r]"),
-            Pattern.compile("\\$\\("),
-            Pattern.compile("(?i)\\b(?:curl|wget|nc|ncat|ssh|scp|sftp|telnet|ftp|invoke-webrequest|iwr)\\b"),
-            Pattern.compile("(?i)\\b(?:sudo|su|chmod|chown|mkfs|dd|shutdown|reboot|powershell|cmd\\.exe)\\b"),
-            Pattern.compile("(?i)\\b(?:rm\\s+-rf|del\\s+/f|rd\\s+/s|remove-item)\\b"),
-            Pattern.compile("(?i)(?:\\.env|printenv|id_rsa|private_key|crj_api_key|stac_api_key)")
+            Pattern.compile("\\$\\(|\\$\\{"),
+            Pattern.compile("\\.\\./|\\.\\.\\\\"),
+            Pattern.compile("(?i)\\b(?:curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|telnet|ftp|"
+                    + "invoke-webrequest|iwr|invoke-restmethod|irm|certutil|bitsadmin)\\b"),
+            Pattern.compile("(?i)\\b(?:sudo|su|chmod|chown|mkfs|dd|shutdown|reboot|"
+                    + "powershell|pwsh|cmd\\.exe|bash|sh|zsh|wsl)\\b"),
+            Pattern.compile("(?i)\\b(?:rm\\s+-rf|del\\s+/f|rd\\s+/s|remove-item|format\\s+[a-z]:)\\b"),
+            Pattern.compile("(?i)\\b(?:python3?|node|deno|bun|ruby|perl|php|lua)\\s+(?:-[ce]|--eval)\\b"),
+            Pattern.compile("(?i)(?:-Dexec\\.|exec:exec|exec:java|--script-shell|JAVA_TOOL_OPTIONS|"
+                    + "MAVEN_OPTS|NODE_OPTIONS|LD_PRELOAD|GIT_SSH_COMMAND|GIT_EXTERNAL_DIFF|--upload-pack)"),
+            Pattern.compile("(?i)(?:\\.env|printenv|id_rsa|id_ed25519|private_key|"
+                    + "crj_api_key|stac_api_key|/etc/passwd|/etc/shadow|authorized_keys)")
+    );
+
+    private static final Pattern DESTRUCTIVE_DIFF_PATTERN = Pattern.compile(
+            "(?i)(?:Runtime\\.getRuntime\\(\\)\\.exec|new\\s+ProcessBuilder\\s*\\(|"
+                    + "rm\\s+-rf\\s+/|curl\\s+https?://[^\\s]+\\s*\\|\\s*(?:sh|bash))"
     );
 
     private ToolExecutionPolicyEngine() {
     }
 
     public static Evaluation evaluate(ProposedToolAction action) {
+        return evaluateWithDiff(action, null);
+    }
+
+    public static Evaluation evaluateWithDiff(ProposedToolAction action, String diffPreview) {
         if (action == null) {
             return new Evaluation(
                     AgentToolName.UNKNOWN,
@@ -48,6 +107,29 @@ public final class ToolExecutionPolicyEngine {
                     ToolApprovalStatus.DENIED,
                     "Proposta de ferramenta ausente."
             );
+        }
+        if (diffPreview != null && !diffPreview.isBlank()) {
+            if (KnowledgeIngestionPolicy.containsSecret(diffPreview)) {
+                return new Evaluation(
+                        AgentToolName.fromRaw(action.rawToolName()),
+                        action.targetPath(),
+                        action.commandText(),
+                        ToolPolicyDecision.DENIED_BY_POLICY,
+                        ToolApprovalStatus.DENIED,
+                        "Diff contem segredo ou credencial exposta; operacao bloqueada."
+                );
+            }
+            if (DESTRUCTIVE_DIFF_PATTERN.matcher(diffPreview).find()
+                    || PromptSecurityGuard.inspectInput(diffPreview).blocked()) {
+                return new Evaluation(
+                        AgentToolName.fromRaw(action.rawToolName()),
+                        action.targetPath(),
+                        action.commandText(),
+                        ToolPolicyDecision.DENIED_BY_POLICY,
+                        ToolApprovalStatus.DENIED,
+                        "Diff contem padrao de execucao arbitraria ou injecao bloqueado por politica."
+                );
+            }
         }
         AgentToolName tool = AgentToolName.fromRaw(action.rawToolName());
         return switch (tool) {
@@ -101,6 +183,16 @@ public final class ToolExecutionPolicyEngine {
     private static Evaluation evaluateWriteTool(String rawPath) {
         try {
             String normalizedPath = KnowledgeIngestionPolicy.normalizeAndValidatePath(rawPath);
+            if (isProtectedWriteTarget(normalizedPath)) {
+                return new Evaluation(
+                        AgentToolName.WRITE_FILE,
+                        normalizedPath,
+                        null,
+                        ToolPolicyDecision.DENIED_BY_POLICY,
+                        ToolApprovalStatus.DENIED,
+                        "Escrita em script executavel, wrapper de build ou pipeline CI/CD bloqueada."
+                );
+            }
             return new Evaluation(
                     AgentToolName.WRITE_FILE,
                     normalizedPath,
@@ -119,6 +211,26 @@ public final class ToolExecutionPolicyEngine {
                     "Escrita em caminho sensivel ou fora do workspace bloqueada."
             );
         }
+    }
+
+    private static boolean isProtectedWriteTarget(String normalizedPath) {
+        String lower = normalizedPath.toLowerCase(Locale.ROOT);
+        for (String prefix : FORBIDDEN_WRITE_PREFIXES) {
+            if (lower.startsWith(prefix)) {
+                return true;
+            }
+        }
+        int slashIdx = lower.lastIndexOf('/');
+        String fileName = slashIdx >= 0 ? lower.substring(slashIdx + 1) : lower;
+        if (FORBIDDEN_WRITE_FILENAMES.contains(fileName) || fileName.startsWith("dockerfile.")) {
+            return true;
+        }
+        for (String ext : FORBIDDEN_WRITE_EXTENSIONS) {
+            if (fileName.endsWith(ext)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Evaluation evaluateCommandTool(String rawCommand) {

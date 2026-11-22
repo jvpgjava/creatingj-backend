@@ -101,13 +101,18 @@ public final class ExecuteRunnerTaskProtocolInteractor implements ExecuteRunnerT
     @Override
     public ToolApproval requestApproval(RequestApprovalCommand command) {
         RemoteTask task = requireAssignedActiveTask(command.deviceId(), command.taskId());
-        ToolExecutionPolicyEngine.Evaluation evaluation = ToolExecutionPolicyEngine.evaluate(
+        String diffPreview = command.diffPreview();
+        if (diffPreview != null && diffPreview.length() > MAX_DIFF_PREVIEW_CHARS) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Preview de diff excede o limite permitido.");
+        }
+        ToolExecutionPolicyEngine.Evaluation evaluation = ToolExecutionPolicyEngine.evaluateWithDiff(
                 new ProposedToolAction(
                         command.toolName(),
                         command.targetPath(),
                         command.commandText(),
                         "Runner request"
-                )
+                ),
+                diffPreview
         );
         Instant now = clock.now();
         if (evaluation.policyDecision() == ToolPolicyDecision.DENIED_BY_POLICY) {
@@ -123,10 +128,6 @@ public final class ExecuteRunnerTaskProtocolInteractor implements ExecuteRunnerT
             throw new DomainException(ErrorCode.VALIDATION_ERROR, evaluation.policyReason());
         }
         int ttl = Math.max(MIN_APPROVAL_TTL_SECONDS, Math.min(command.ttlSeconds(), MAX_APPROVAL_TTL_SECONDS));
-        String diffPreview = command.diffPreview();
-        if (diffPreview != null && diffPreview.length() > MAX_DIFF_PREVIEW_CHARS) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Preview de diff excede o limite permitido.");
-        }
         ToolApproval saved = approvalStore.save(new ToolApproval(
                 ToolApprovalId.random(),
                 task.id(),

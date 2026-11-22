@@ -86,6 +86,44 @@ class AgentDomainAndPolicyTest {
                 new ProposedToolAction("WRITE_FILE", ".env.production", null, "Overwrite env"));
         assertThat(writeEnv.policyDecision()).isEqualTo(ToolPolicyDecision.DENIED_BY_POLICY);
 
+        List<String> protectedWriteTargets = List.of(
+                "Jenkinsfile",
+                "Dockerfile",
+                "Dockerfile.prod",
+                "mvnw",
+                "mvnw.cmd",
+                ".github/workflows/ci.yml",
+                ".husky/pre-commit",
+                "scripts/deploy.sh",
+                "scripts/setup.ps1",
+                "scripts/run.bat"
+        );
+        for (String target : protectedWriteTargets) {
+            var eval = ToolExecutionPolicyEngine.evaluate(
+                    new ProposedToolAction("WRITE_FILE", target, null, "Modify protected file"));
+            assertThat(eval.policyDecision())
+                    .as("Expected write target to be denied: %s", target)
+                    .isEqualTo(ToolPolicyDecision.DENIED_BY_POLICY);
+        }
+
+        var diffWithSecret = ToolExecutionPolicyEngine.evaluateWithDiff(
+                new ProposedToolAction("WRITE_FILE", "src/App.java", null, "Write code"),
+                "+ String key = \"sk-1234567890abcdefghijklmnop\";"
+        );
+        assertThat(diffWithSecret.policyDecision()).isEqualTo(ToolPolicyDecision.DENIED_BY_POLICY);
+
+        var diffWithExec = ToolExecutionPolicyEngine.evaluateWithDiff(
+                new ProposedToolAction("WRITE_FILE", "src/App.java", null, "Write code"),
+                "+ Runtime.getRuntime().exec(\"calc\");"
+        );
+        assertThat(diffWithExec.policyDecision()).isEqualTo(ToolPolicyDecision.DENIED_BY_POLICY);
+
+        var safeDiff = ToolExecutionPolicyEngine.evaluateWithDiff(
+                new ProposedToolAction("WRITE_FILE", "src/App.java", null, "Write code"),
+                "+ public int sum(int a, int b) { return a + b; }"
+        );
+        assertThat(safeDiff.policyDecision()).isEqualTo(ToolPolicyDecision.REQUIRES_APPROVAL);
+
         var safeCmd = ToolExecutionPolicyEngine.evaluate(
                 new ProposedToolAction("RUN_COMMAND", null, "mvn test", "Run unit tests"));
         assertThat(safeCmd.policyDecision()).isEqualTo(ToolPolicyDecision.REQUIRES_APPROVAL);

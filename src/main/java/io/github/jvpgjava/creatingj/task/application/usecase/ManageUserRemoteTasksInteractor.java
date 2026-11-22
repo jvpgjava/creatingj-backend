@@ -7,6 +7,7 @@ import io.github.jvpgjava.creatingj.audit.domain.AuditEvent;
 import io.github.jvpgjava.creatingj.common.application.port.out.ClockPort;
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.ErrorCode;
+import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.device.application.port.out.DeviceStorePort;
 import io.github.jvpgjava.creatingj.device.domain.Device;
 import io.github.jvpgjava.creatingj.identity.domain.UserId;
@@ -78,6 +79,19 @@ public final class ManageUserRemoteTasksInteractor implements ManageUserRemoteTa
             }
         }
         Instant now = clock.now();
+        PromptSecurityGuard.GuardVerdict instructionVerdict = PromptSecurityGuard.inspectInput(command.instruction());
+        if (instructionVerdict.blocked()) {
+            auditPort.record(AuditEvent.of(
+                    UUID.randomUUID(),
+                    command.actorUserId().value(),
+                    command.actorUserId().value(),
+                    AuditAction.GUARDRAIL_TRIGGERED,
+                    "BLOCKED",
+                    "remoteTask category=" + instructionVerdict.category() + " deviceId=" + device.id(),
+                    now
+            ));
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, instructionVerdict.reason());
+        }
         boolean online = device.isOnline(now);
         String idempotencyKey = command.idempotencyKey() == null || command.idempotencyKey().isBlank()
                 ? null
