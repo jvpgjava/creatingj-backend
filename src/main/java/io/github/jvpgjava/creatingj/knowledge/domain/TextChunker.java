@@ -16,6 +16,19 @@ public final class TextChunker {
 
     private static final Pattern HEADING_LINE = Pattern.compile("(?m)^(#{1,3})\\s+(.+)$");
 
+    private static final Pattern CODE_TYPE_DECL = Pattern.compile(
+            "(?m)^\\s*(?:(?:public|private|protected|internal|abstract|final|sealed|export|default|open|data)\\s+)*"
+                    + "(?:class|interface|record|enum|struct|trait|impl|module|namespace|protocol)\\s+"
+                    + "([A-Za-z_][A-Za-z0-9_<>,\\.]*)"
+    );
+
+    private static final Pattern CODE_FUNC_DECL = Pattern.compile(
+            "(?m)^\\s*(?:(?:public|private|protected|internal|static|final|async|export|pub|override|virtual)\\s+)*"
+                    + "(?:def|fn|func|function|fun)\\s+([A-Za-z_][A-Za-z0-9_]*)"
+                    + "|^\\s*(?:public|protected|private)\\s+(?:static\\s+)?[A-Za-z0-9_<>,\\[\\]\\?]+\\s+"
+                    + "([A-Za-z_][A-Za-z0-9_]*)\\s*\\("
+    );
+
     private TextChunker() {
     }
 
@@ -34,9 +47,10 @@ public final class TextChunker {
         int length = normalizedContent.length();
         int start = 0;
         String[] activeHeadings = new String[3];
+        String[] activeCodeContext = new String[2];
 
         while (start < length) {
-            String prefix = buildHeadingPrefix(activeHeadings, chunkSize);
+            String prefix = buildContextPrefix(activeHeadings, activeCodeContext, chunkSize);
             int contentBudget = Math.max(1, chunkSize - prefix.length());
             int rawSlicePreviewEnd = Math.min(length, start + contentBudget);
             boolean startsWithHeading = normalizedContent.substring(start, rawSlicePreviewEnd)
@@ -54,7 +68,7 @@ public final class TextChunker {
                 }
             }
             String rawPiece = normalizedContent.substring(start, end);
-            updateHeadings(rawPiece, activeHeadings);
+            updateContextMarkers(rawPiece, activeHeadings, activeCodeContext);
             String piece = rawPiece.trim();
             if (!piece.isEmpty()) {
                 String formatted = (!prefix.isEmpty() && !piece.startsWith("#")
@@ -79,11 +93,15 @@ public final class TextChunker {
         return List.copyOf(chunks);
     }
 
-    private static void updateHeadings(String textSlice, String[] activeHeadings) {
-        Matcher matcher = HEADING_LINE.matcher(textSlice);
-        while (matcher.find()) {
-            int level = matcher.group(1).length();
-            String title = matcher.group(2).trim();
+    private static void updateContextMarkers(
+            String textSlice,
+            String[] activeHeadings,
+            String[] activeCodeContext
+    ) {
+        Matcher headingMatcher = HEADING_LINE.matcher(textSlice);
+        while (headingMatcher.find()) {
+            int level = headingMatcher.group(1).length();
+            String title = headingMatcher.group(2).trim();
             if (level >= 1 && level <= 3 && !title.isEmpty()) {
                 activeHeadings[level - 1] = title;
                 for (int i = level; i < 3; i++) {
@@ -91,23 +109,49 @@ public final class TextChunker {
                 }
             }
         }
+        Matcher typeMatcher = CODE_TYPE_DECL.matcher(textSlice);
+        while (typeMatcher.find()) {
+            activeCodeContext[0] = typeMatcher.group(1);
+            activeCodeContext[1] = null;
+        }
+        Matcher funcMatcher = CODE_FUNC_DECL.matcher(textSlice);
+        while (funcMatcher.find()) {
+            String fn = funcMatcher.group(1) != null ? funcMatcher.group(1) : funcMatcher.group(2);
+            if (fn != null && !List.of("if", "for", "while", "switch", "catch").contains(fn)) {
+                activeCodeContext[1] = fn;
+            }
+        }
     }
 
-    private static String buildHeadingPrefix(String[] activeHeadings, int chunkSize) {
+    private static String buildContextPrefix(
+            String[] activeHeadings,
+            String[] activeCodeContext,
+            int chunkSize
+    ) {
         if (chunkSize < 160) {
             return "";
         }
-        List<String> parts = new ArrayList<>(3);
+        List<String> headingParts = new ArrayList<>(3);
         for (String h : activeHeadings) {
             if (h != null && !h.isBlank()) {
-                parts.add(h);
+                headingParts.add(h);
             }
         }
-        if (parts.isEmpty()) {
-            return "";
+        if (!headingParts.isEmpty()) {
+            String prefix = "[Secao: " + String.join(" > ", headingParts) + "]\n";
+            return prefix.length() <= chunkSize / 4 ? prefix : "";
         }
-        String prefix = "[Secao: " + String.join(" > ", parts) + "]\n";
-        return prefix.length() <= chunkSize / 4 ? prefix : "";
+        List<String> codeParts = new ArrayList<>(2);
+        for (String c : activeCodeContext) {
+            if (c != null && !c.isBlank()) {
+                codeParts.add(c);
+            }
+        }
+        if (!codeParts.isEmpty()) {
+            String prefix = "[Codigo: " + String.join(" > ", codeParts) + "]\n";
+            return prefix.length() <= chunkSize / 4 ? prefix : "";
+        }
+        return "";
     }
 
     private static int findBoundary(String text, int start, int end) {

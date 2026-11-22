@@ -147,7 +147,7 @@ public final class SendMessageInteractor implements SendMessageUseCase {
             ModelCompletionResult completion = modelGateway.complete(request);
             Instant finishedAt = clock.now();
             OutputSecurityGuard.SanitizedOutput sanitized =
-                    OutputSecurityGuard.inspectAndSanitize(completion.content());
+                    OutputSecurityGuard.inspectAndSanitize(completion.content(), true);
             if (!sanitized.flags().isEmpty()) {
                 auditPort.record(AuditEvent.of(
                         UUID.randomUUID(),

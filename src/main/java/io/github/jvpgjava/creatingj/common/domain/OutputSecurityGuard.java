@@ -43,6 +43,10 @@ public final class OutputSecurityGuard {
     }
 
     public static SanitizedOutput inspectAndSanitize(String rawOutput) {
+        return inspectAndSanitize(rawOutput, false);
+    }
+
+    public static SanitizedOutput inspectAndSanitize(String rawOutput, boolean appendCodeAdvisories) {
         if (rawOutput == null || rawOutput.isBlank()) {
             return new SanitizedOutput("(sem resposta textual)", List.of(), false);
         }
@@ -80,6 +84,14 @@ public final class OutputSecurityGuard {
             flags.add(FLAG_DESTRUCTIVE_SNIPPET);
             sanitized = DESTRUCTIVE_SHELL_BOMB.matcher(sanitized)
                     .replaceAll("[COMANDO_DESTRUTIVO_BLOQUEADO]");
+        }
+
+        CodeSecurityAnalyzer.AnalysisResult codeAnalysis = CodeSecurityAnalyzer.analyze(sanitized);
+        if (!codeAnalysis.flags().isEmpty()) {
+            flags.addAll(codeAnalysis.flags());
+            if (appendCodeAdvisories) {
+                sanitized = sanitized + CodeSecurityAnalyzer.formatAdvisoryBlock(codeAnalysis.advisories());
+            }
         }
 
         String finalContent = sanitized.isBlank() ? "(sem resposta textual)" : sanitized;

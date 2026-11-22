@@ -1,5 +1,6 @@
 package io.github.jvpgjava.creatingj.agent.domain;
 
+import io.github.jvpgjava.creatingj.common.domain.CodeSecurityAnalyzer;
 import io.github.jvpgjava.creatingj.common.domain.DomainException;
 import io.github.jvpgjava.creatingj.common.domain.PromptSecurityGuard;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIngestionPolicy;
@@ -25,17 +26,70 @@ public final class ToolExecutionPolicyEngine {
             "mvnw -b test",
             "mvnw -b verify",
             "gradle test",
+            "gradle check",
             "./gradlew test",
+            "./gradlew check",
+            "gradlew test",
+            "gradlew check",
             "npm test",
             "npm run build",
             "npm run lint",
+            "npm run typecheck",
             "pnpm test",
             "pnpm build",
             "pnpm lint",
+            "pnpm typecheck",
+            "yarn test",
+            "yarn build",
+            "yarn lint",
+            "npx vitest run",
+            "npx jest",
+            "npx tsc --noemit",
+            "npx eslint",
+            "npx ng test",
+            "npx ng build",
+            "deno test",
+            "deno check",
+            "deno lint",
+            "bun test",
+            "bun run build",
+            "bun run lint",
+            "pytest",
+            "python -m pytest",
+            "python3 -m pytest",
+            "python -m unittest",
+            "python3 -m unittest",
+            "ruff check",
+            "flake8",
+            "mypy",
+            "black --check",
             "cargo test",
             "cargo check",
             "cargo clippy",
-            "pytest",
+            "cargo build",
+            "go test",
+            "go vet",
+            "go build",
+            "golangci-lint run",
+            "dotnet test",
+            "dotnet build",
+            "dotnet format --verify-no-changes",
+            "composer test",
+            "vendor/bin/phpunit",
+            "php artisan test",
+            "vendor/bin/phpstan",
+            "bundle exec rspec",
+            "bundle exec rake test",
+            "rubocop",
+            "flutter test",
+            "flutter analyze",
+            "dart test",
+            "dart analyze",
+            "ctest",
+            "cmake --build",
+            "mix test",
+            "swift test",
+            "swift build",
             "git status",
             "git diff",
             "git log"
@@ -120,14 +174,15 @@ public final class ToolExecutionPolicyEngine {
                 );
             }
             if (DESTRUCTIVE_DIFF_PATTERN.matcher(diffPreview).find()
-                    || PromptSecurityGuard.inspectInput(diffPreview).blocked()) {
+                    || PromptSecurityGuard.inspectInput(diffPreview).blocked()
+                    || CodeSecurityAnalyzer.analyze(diffPreview).hasCriticalFinding()) {
                 return new Evaluation(
                         AgentToolName.fromRaw(action.rawToolName()),
                         action.targetPath(),
                         action.commandText(),
                         ToolPolicyDecision.DENIED_BY_POLICY,
                         ToolApprovalStatus.DENIED,
-                        "Diff contem padrao de execucao arbitraria ou injecao bloqueado por politica."
+                        "Diff contem padrao critico de vulnerabilidade, execucao arbitraria ou injecao bloqueado."
                 );
             }
         }

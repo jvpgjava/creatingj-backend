@@ -7,6 +7,7 @@ import io.github.jvpgjava.creatingj.knowledge.domain.HybridRagRanker;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeChunk;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSearchMatch;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceId;
+import io.github.jvpgjava.creatingj.knowledge.domain.MultiQueryRagDecomposer;
 import io.github.jvpgjava.creatingj.project.domain.ProjectId;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -167,12 +168,13 @@ public class PgVectorKnowledgeStoreAdapter implements VectorKnowledgePort {
             return fused;
         }
         Map<KnowledgeSourceId, Integer> sourceChunkCounts = loadSourceChunkCounts(projectId, ownerUserId);
-        return HybridRagRanker.expandSmallDocumentSiblings(
+        List<KnowledgeSearchMatch> withSiblings = HybridRagRanker.expandSmallDocumentSiblings(
                 fused,
                 vectorCandidates,
                 sourceChunkCounts,
                 topK
         );
+        return MultiQueryRagDecomposer.expandCutCodeNeighbors(withSiblings, vectorCandidates, topK);
     }
 
     private List<KnowledgeSearchMatch> queryFullText(

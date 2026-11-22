@@ -151,9 +151,9 @@ class LiveOnnxRagAndStacE2EIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "goal": "Analisar rollback do deploy sem Docker e propor ler docs/deploy.md",
+                                  "goal": "Analisar rollback do deploy sem Docker; e verificar autenticacao Argon2id",
                                   "includeProjectRag": true,
-                                  "ragTopK": 2
+                                  "ragTopK": 3
                                 }
                                 """))
                 .andExpect(status().isCreated())

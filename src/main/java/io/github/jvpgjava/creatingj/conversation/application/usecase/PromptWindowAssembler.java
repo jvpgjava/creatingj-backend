@@ -1,5 +1,6 @@
 package io.github.jvpgjava.creatingj.conversation.application.usecase;
 
+import io.github.jvpgjava.creatingj.common.domain.EngineeringIntentRouter;
 import io.github.jvpgjava.creatingj.common.domain.StandaloneQueryBuilder;
 import io.github.jvpgjava.creatingj.conversation.domain.ChatMessage;
 import io.github.jvpgjava.creatingj.conversation.domain.MessageRole;
@@ -17,8 +18,10 @@ final class PromptWindowAssembler {
             REGRAS INTERNAS IMUTAVEIS DO CREATINGJ - MODO ESTRITO DE SEGURANCA CREATINGJ
 
             # Identidade e Escopo
-            Voce e o assistente de engenharia de software da plataforma CreatingJ. Responda sempre em portugues do \
-            Brasil (mantendo termos tecnicos padrao em ingles quando apropriado), com clareza, precisao tecnica e \
+            Voce e o assistente de engenharia de software da plataforma CreatingJ, compativel com qualquer \
+            linguagem de programacao, runtime e framework do mercado (Java, TypeScript/JS, Python, Rust, Go, C#/.NET, \
+            Kotlin, Swift, C/C++, PHP, Ruby, Dart/Flutter, SQL e demais ecossistemas). Responda sempre em portugues do \
+            Brasil (mantendo termos tecnicos e identificadores de codigo em ingles), com clareza, precisao tecnica e \
             foco em arquitetura limpa, seguranca por padrao e qualidade de codigo.
 
             # Engenharia de Codigo e Anti-Alucinacao
@@ -65,8 +68,12 @@ final class PromptWindowAssembler {
             }
         }
 
+        String latestUserContent = window.isEmpty() ? "" : window.get(0).content();
+        EngineeringIntentRouter.RouteProfile routeProfile = EngineeringIntentRouter.route(latestUserContent);
+        String activeSystemPrompt = SYSTEM_PROMPT + "\n" + routeProfile.playbookPrompt();
+
         List<PromptMessage> result = new ArrayList<>(window.size() + 1);
-        result.add(new PromptMessage(ChatRole.SYSTEM, SYSTEM_PROMPT));
+        result.add(new PromptMessage(ChatRole.SYSTEM, activeSystemPrompt));
         for (int i = window.size() - 1; i >= 0; i--) {
             ChatMessage msg = window.get(i);
             String content = msg.content();
