@@ -1,10 +1,20 @@
-# CreatingJ Backend
+<div align="center">
+  <img src=".github/assets/creatingj-mascot.png" alt="Mascote CreatingJ" width="220" />
 
-[![Java](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.2.0-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![Spring AI](https://img.shields.io/badge/Spring%20AI-2.1.0-6DB33F)](https://spring.io/projects/spring-ai)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%20%2B%20pgvector-336791?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-v1-6BA539?logo=openapiinitiative&logoColor=white)](openapi/openapi-v1.yaml)
+  <h1>CreatingJ Backend</h1>
+
+  <p>
+    <strong>Plataforma de Engenharia de Software Assistida por IA — Monólito Modular Hexagonal</strong>
+  </p>
+
+  <p>
+    <a href="https://adoptium.net/"><img src="https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white" alt="Java 25" /></a>
+    <a href="https://spring.io/projects/spring-boot"><img src="https://img.shields.io/badge/Spring%20Boot-4.2.0-6DB33F?logo=springboot&logoColor=white" alt="Spring Boot 4.2.0" /></a>
+    <a href="https://spring.io/projects/spring-ai"><img src="https://img.shields.io/badge/Spring%20AI-2.1.0-6DB33F" alt="Spring AI 2.1.0" /></a>
+    <a href="https://github.com/pgvector/pgvector"><img src="https://img.shields.io/badge/PostgreSQL-18%20%2B%20pgvector-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 18 + pgvector" /></a>
+    <a href="openapi/openapi-v1.yaml"><img src="https://img.shields.io/badge/OpenAPI-v1-6BA539?logo=openapiinitiative&logoColor=white" alt="OpenAPI v1" /></a>
+  </p>
+</div>
 
 Backend principal da plataforma **CreatingJ**, desenvolvido como um **monólito modular hexagonal** em Java 25 e Spring Boot 4.2, com chat em tempo real (SSE), RAG vetorial isolado por projeto (`pgvector` + embeddings ONNX locais via Spring AI ou API OpenAI-compatible), orquestração de agente com política determinística de segurança e protocolo de execução remota para dispositivos pareados (`creatingj-agent`).
 
