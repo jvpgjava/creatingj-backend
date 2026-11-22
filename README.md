@@ -4,10 +4,11 @@
   <h1>CreatingJ Backend</h1>
 
   <p>
-    <strong>Seu assistente de engenharia de software com IA, pronto para qualquer linguagem e framework.</strong>
+    <strong><em>"Não existe limite para sua imaginação."</em></strong>
   </p>
 
   <p>
+    Seu assistente de engenharia de software com IA, pronto para qualquer linguagem e framework.<br />
     Converse sobre código em tempo real, busque conhecimento dentro dos seus próprios projetos, planeje tarefas com agentes inteligentes e acompanhe execuções nos seus dispositivos pareados — tudo com segurança, controle e privacidade no centro.
   </p>
 
