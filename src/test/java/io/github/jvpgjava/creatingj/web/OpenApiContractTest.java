@@ -98,10 +98,12 @@ class OpenApiContractTest {
         assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/events")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/approvals")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/runner/tasks/{taskId}/complete")).isTrue();
+        assertThat(generated.path("paths").has("/api/v1/admin/maintenance/retention")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("bearerAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("cookieAuth")).isTrue();
         assertThat(generated.path("components").path("securitySchemes").has("deviceTokenAuth")).isTrue();
         assertThat(generated.path("paths").has("/api/v1/auth/register")).isFalse();
+        assertThat(body).doesNotContain("passwordHash", "CRJ_API_KEY", "STAC_API_KEY");
     }
 
     @Test

@@ -82,6 +82,8 @@ public class SecurityConfig {
                 .headers(headers -> headers
                         .contentTypeOptions(contentType -> { })
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
                         .referrerPolicy(referrer -> referrer
                                 .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
                 )

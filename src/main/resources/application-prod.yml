@@ -17,3 +17,9 @@ creatingj:
     ai:
       require-api-key: true
       strict-url-validation: true
+  retention:
+    expired-sessions-days: 30
+    expired-pairing-challenges-days: 7
+    completed-tasks-days: 90
+    archived-conversations-days: 90
+    audit-events-days: 180

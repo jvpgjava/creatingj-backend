@@ -52,7 +52,21 @@ class ProdSecurityProfileTest {
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.components").doesNotExist());
 
+        var statusResp = mockMvc.perform(get("/api/v1/system/status"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse();
+        assertThat(statusResp.getHeader("Content-Security-Policy"))
+                .contains("default-src 'none'")
+                .contains("frame-ancestors 'none'");
+        assertThat(statusResp.getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(statusResp.getHeader("X-Frame-Options")).isEqualTo("DENY");
+        assertThat(statusResp.getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+
         int envStatus = mockMvc.perform(get("/actuator/env")).andReturn().getResponse().getStatus();
+        int beansStatus = mockMvc.perform(get("/actuator/beans")).andReturn().getResponse().getStatus();
+        int metricsStatus = mockMvc.perform(get("/actuator/metrics")).andReturn().getResponse().getStatus();
         assertThat(envStatus).isIn(401, 403, 404);
+        assertThat(beansStatus).isIn(401, 403, 404);
+        assertThat(metricsStatus).isIn(401, 403);
     }
 }

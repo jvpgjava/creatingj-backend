@@ -48,6 +48,7 @@ import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeIndexJob;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSearchMatch;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSource;
 import io.github.jvpgjava.creatingj.knowledge.domain.KnowledgeSourceId;
+import io.github.jvpgjava.creatingj.maintenance.application.port.out.DataRetentionStorePort;
 import io.github.jvpgjava.creatingj.project.application.port.out.ProjectStorePort;
 import io.github.jvpgjava.creatingj.project.domain.Project;
 import io.github.jvpgjava.creatingj.project.domain.ProjectId;
@@ -760,6 +761,36 @@ public class TestInMemoryStoresConfig {
             @Override
             public List<ToolApproval> findByTaskOrderByCreatedAsc(TaskId taskId) {
                 return store.values().stream().filter(a -> a.taskId().equals(taskId)).toList();
+            }
+        };
+    }
+
+    @Bean
+    public DataRetentionStorePort testDataRetentionStorePort() {
+        return new DataRetentionStorePort() {
+            @Override
+            public int deleteExpiredOrRevokedSessionsBefore(Instant cutoff) {
+                return 0;
+            }
+
+            @Override
+            public int deleteExpiredPairingChallengesBefore(Instant cutoff) {
+                return 0;
+            }
+
+            @Override
+            public int deleteTerminalTasksBefore(Instant cutoff) {
+                return 0;
+            }
+
+            @Override
+            public int deleteArchivedConversationsBefore(Instant cutoff) {
+                return 0;
+            }
+
+            @Override
+            public int deleteAuditEventsBefore(Instant cutoff) {
+                return 0;
             }
         };
     }

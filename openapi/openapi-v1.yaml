@@ -32,6 +32,8 @@ tags:
 - name: Admin Usage
   description: Visao administrativa de consumo e configuracao de quotas (restrito
     a ADMIN)
+- name: Admin Maintenance
+  description: Politica de retencao e manutencao operacional (ROLE_ADMIN)
 - name: Admin Users
   description: Gestao administrativa de contas CreatingJ (restrito a ADMIN)
 paths:
@@ -1506,6 +1508,34 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
       security:
       - bearerAuth: []
+  /api/v1/admin/maintenance/retention:
+    post:
+      tags:
+      - Admin Maintenance
+      summary: Executar politica de retencao e expurgo de registros expirados/arquivados
+      operationId: executeDataRetention
+      responses:
+        "200":
+          description: Relatorio de expurgo executado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataRetentionReportResponse"
+        "401":
+          description: Nao autenticado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: Acesso restrito a administradores
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/usage/me:
     get:
       tags:
@@ -2885,6 +2915,30 @@ components:
         suspendedAt:
           type: string
           format: date-time
+    DataRetentionReportResponse:
+      type: object
+      properties:
+        executedAt:
+          type: string
+          format: date-time
+        deletedSessions:
+          type: integer
+          format: int32
+        deletedPairingChallenges:
+          type: integer
+          format: int32
+        deletedCompletedTasks:
+          type: integer
+          format: int32
+        deletedArchivedConversations:
+          type: integer
+          format: int32
+        deletedAuditEvents:
+          type: integer
+          format: int32
+        totalDeleted:
+          type: integer
+          format: int32
     UsageRecordResponse:
       type: object
       properties:
