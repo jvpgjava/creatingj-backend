@@ -1,6 +1,10 @@
 spring:
   config:
     import: optional:file:.env[.properties]
+  datasource:
+    url: ${CREATINGJ_DB_URL:jdbc:postgresql://localhost:5432/creatingj}
+    username: ${CREATINGJ_DB_USER:postgres}
+    password: ${CREATINGJ_DB_PASSWORD:postgres}
 
 creatingj:
   docs:

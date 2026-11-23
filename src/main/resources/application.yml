@@ -1,6 +1,8 @@
 spring:
   application:
     name: creatingj-backend
+  banner:
+    charset: UTF-8
   datasource:
     url: ${CREATINGJ_DB_URL:}
     username: ${CREATINGJ_DB_USER:}
